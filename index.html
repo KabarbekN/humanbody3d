@@ -3,10 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#080d12" />
+  <meta name="theme-color" content="#071018" />
   <meta name="description" content="Интерактивный 3D-анатомический атлас на Three.js и BodyParts3D." />
-  <title>3D Anatomy Atlas</title>
-  <link rel="stylesheet" href="./styles.css" />
+  <title>3D Anatomy Explorer</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./styles.css?v=5" />
   <script type="importmap">
   {
     "imports": {
@@ -20,114 +22,214 @@
 <body>
   <main id="viewport" aria-label="3D-анатомическая модель">
     <canvas id="sceneCanvas"></canvas>
+    <div id="worldLabels" class="world-label-layer" aria-hidden="true"></div>
     <div id="hoverLabel" class="hover-label"></div>
   </main>
 
-  <header class="topbar panel">
-    <strong>3D Anatomy</strong>
-    <span id="connectionStatus" class="status-dot"><i></i>загрузка</span>
-    <span id="datasetBadge" class="mesh-count">0</span>
+  <header class="topbar glass">
+    <div class="brand-block">
+      <button id="sidebarToggle" class="icon-button mobile-only" aria-label="Открыть навигацию">☰</button>
+      <div class="brand-mark">A</div>
+      <div><strong>3D Anatomy</strong><small>Explorer</small></div>
+    </div>
+    <div class="search-wrap">
+      <span class="search-icon">⌕</span>
+      <input id="searchInput" type="search" placeholder="Орган, мышца, латинское название или FMA ID" autocomplete="off" />
+      <div id="searchResults" class="search-results glass"></div>
+    </div>
+    <div class="top-actions">
+      <span id="connectionStatus" class="status-pill loading"><i></i><span>загрузка</span></span>
+      <span id="datasetBadge" class="dataset-badge">0 объектов</span>
+      <button id="installButton" class="soft-button" hidden>Установить</button>
+      <button id="shareButton" class="icon-button" title="Скопировать ссылку">↗</button>
+    </div>
   </header>
 
-  <div class="search-wrap panel">
-    <span class="search-icon">⌕</span>
-    <input id="searchInput" type="search" placeholder="Найти структуру" autocomplete="off" />
-    <div id="searchResults" class="search-results"></div>
-  </div>
+  <aside id="leftSidebar" class="left-sidebar glass">
+    <div class="sidebar-head">
+      <div>
+        <strong>Навигация</strong>
+        <small>Системы и учебные режимы</small>
+      </div>
+      <button id="sidebarClose" class="icon-button mobile-only" aria-label="Закрыть">×</button>
+    </div>
 
-  <nav class="preset-bar panel" aria-label="Слои">
-    <button class="preset" data-preset="skin">Кожа</button>
-    <button class="preset active" data-preset="muscles">Мышцы</button>
-    <button class="preset" data-preset="skeleton">Скелет</button>
-    <button class="preset" data-preset="brain">Мозг</button>
-    <button class="preset" data-preset="internal">Органы</button>
-    <button class="preset" data-preset="all">Все</button>
+    <div class="mode-tabs">
+      <button class="active" data-mode="explore">Атлас</button>
+      <button data-mode="learn">Обучение</button>
+      <button data-mode="quiz">Тест</button>
+    </div>
+
+    <section class="mode-panel active" data-mode-panel="explore">
+      <div class="tree-tools">
+        <input id="treeSearch" type="search" placeholder="Фильтр дерева" />
+      </div>
+      <div id="anatomyTree" class="anatomy-tree"></div>
+    </section>
+
+    <section class="mode-panel" data-mode-panel="learn">
+      <div class="section-copy">
+        <strong>Учебные маршруты</strong>
+        <p>Камера и слои переключаются автоматически.</p>
+      </div>
+      <div id="tourList" class="tour-list"></div>
+    </section>
+
+    <section class="mode-panel" data-mode-panel="quiz">
+      <div class="quiz-card">
+        <div class="quiz-top"><span>Счёт</span><strong id="quizScore">0 / 0</strong></div>
+        <h2 id="quizQuestion">Проверьте знание анатомии</h2>
+        <p id="quizHint">Выберите структуру на 3D-модели.</p>
+        <div id="quizFeedback" class="quiz-feedback">Нажмите «Начать тест».</div>
+        <div class="quiz-actions">
+          <button id="startQuiz" class="primary-button">Начать тест</button>
+          <button id="quizNext" class="soft-button" disabled>Следующий вопрос</button>
+        </div>
+      </div>
+    </section>
+
+    <footer class="sidebar-foot">
+      <button id="openCredits" class="credit-link">BodyParts3D · CC BY-SA 2.1 JP</button>
+    </footer>
+  </aside>
+
+  <nav class="preset-bar glass" aria-label="Основные режимы">
+    <button data-preset="skin"><i style="--dot:#bd826d"></i><span>Кожа</span></button>
+    <button data-preset="muscles" class="active"><i style="--dot:#8f2830"></i><span>Мышцы</span></button>
+    <button data-preset="skeleton"><i style="--dot:#e6ddc2"></i><span>Скелет</span></button>
+    <button data-preset="brain"><i style="--dot:#b98783"></i><span>Мозг</span></button>
+    <button data-preset="internal"><i style="--dot:#a85b55"></i><span>Органы</span></button>
+    <button data-preset="all"><i style="--dot:#69c8e6"></i><span>Все</span></button>
   </nav>
 
-  <div class="quick-actions panel">
-    <button id="settingsToggle" aria-label="Настройки" title="Настройки">☰</button>
-    <button data-view="front" aria-label="Вид спереди" title="Спереди">F</button>
-    <button data-view="back" aria-label="Вид сзади" title="Сзади">B</button>
-    <button data-view="left" aria-label="Вид слева" title="Слева">L</button>
-    <button data-view="right" aria-label="Вид справа" title="Справа">R</button>
-    <button data-view="reset" aria-label="Общий вид" title="Общий вид">◎</button>
+  <div class="view-toolbar glass">
+    <button data-view="front" title="Спереди">F</button>
+    <button data-view="back" title="Сзади">B</button>
+    <button data-view="left" title="Слева">L</button>
+    <button data-view="right" title="Справа">R</button>
+    <button data-view="reset" title="Общий вид">◎</button>
   </div>
 
-  <aside id="settingsPanel" class="settings panel" aria-label="Настройки">
+  <div class="tool-dock glass">
+    <button id="settingsToggle" title="Слои и срезы"><span>◫</span><small>Слои</small></button>
+    <button data-mode="measure" title="Измерение"><span>⌁</span><small>Измерить</small></button>
+    <button data-mode="annotate" title="Аннотации"><span>✎</span><small>Метка</small></button>
+    <button id="screenshotButton" title="Снимок"><span>◉</span><small>Снимок</small></button>
+  </div>
+
+  <aside id="settingsPanel" class="settings-drawer glass">
     <div class="drawer-head">
-      <strong>Настройки</strong>
-      <button id="settingsClose" aria-label="Закрыть">×</button>
+      <div><strong>Инструменты сцены</strong><small>Слои, срезы и память</small></div>
+      <button id="settingsClose" class="icon-button">×</button>
     </div>
 
-    <div id="layerControls" class="layer-list"></div>
+    <div class="drawer-section">
+      <div class="section-title"><strong>Слои</strong><button id="loadDetail" class="text-button">Загрузить детали</button></div>
+      <div id="layerControls" class="layer-list"></div>
+    </div>
 
-    <label class="toggle-row">
-      <span>Срез</span>
-      <input id="clipEnabled" type="checkbox" />
-    </label>
-    <label class="range-row">
-      <span>Положение</span>
-      <input id="clipSlider" type="range" min="-100" max="100" value="0" disabled />
-    </label>
-    <label class="range-row">
-      <span>Разнести</span>
-      <input id="explodeSlider" type="range" min="0" max="100" value="0" />
-    </label>
+    <div class="drawer-section">
+      <div class="section-title"><strong>Подписи в 3D</strong></div>
+      <select id="labelMode" class="select-control">
+        <option value="selected">Только выбранная</option>
+        <option value="major">Основные структуры</option>
+        <option value="system">Активная система</option>
+        <option value="off">Выключить</option>
+      </select>
+    </div>
 
-    <div class="action-grid">
-      <button id="isolateButton" disabled>Изолировать</button>
-      <button id="clearSelection" disabled>Сбросить выбор</button>
-      <button id="resetLayers">Сбросить слои</button>
-      <button id="loadDetail" disabled>Больше деталей</button>
+    <div class="drawer-section">
+      <div class="section-title"><strong>Анатомические срезы</strong></div>
+      <div class="clip-grid">
+        <div class="clip-row"><label><input id="clipXEnabled" type="checkbox" /> Сагиттальный</label><input id="clipX" type="range" min="-100" max="100" value="0" /><button id="clipXFlip" title="Сменить сторону">⇄</button></div>
+        <div class="clip-row"><label><input id="clipYEnabled" type="checkbox" /> Аксиальный</label><input id="clipY" type="range" min="-100" max="100" value="0" /><button id="clipYFlip" title="Сменить сторону">⇄</button></div>
+        <div class="clip-row"><label><input id="clipZEnabled" type="checkbox" /> Фронтальный</label><input id="clipZ" type="range" min="-100" max="100" value="0" /><button id="clipZFlip" title="Сменить сторону">⇄</button></div>
+      </div>
+    </div>
+
+    <div class="drawer-section">
+      <div class="section-title"><strong>Разнесение слоёв</strong></div>
+      <input id="explodeSlider" class="wide-range" type="range" min="0" max="100" value="0" />
+    </div>
+
+    <div class="drawer-section">
+      <div class="section-title"><strong>Измерения</strong><button id="clearMeasurements" class="text-button">Очистить</button></div>
+      <div id="measurementList" class="compact-list"></div>
+    </div>
+
+    <div class="drawer-section">
+      <div class="section-title"><strong>Аннотации</strong></div>
+      <div id="annotationList" class="compact-list"></div>
+    </div>
+
+    <div class="drawer-section memory-section">
+      <div class="section-title"><strong>Память и кэш</strong></div>
+      <div class="memory-card"><span>В сцене</span><strong id="memorySummary">0 мешей</strong></div>
+      <div class="memory-card"><span>Офлайн-кэш</span><strong id="cacheCount">проверка…</strong></div>
+      <label class="toggle-line"><span>Автовыгрузка скрытых слоёв</span><input id="autoUnload" type="checkbox" /></label>
+      <div class="button-pair"><button id="unloadHidden" class="soft-button">Выгрузить скрытые</button><button id="clearCache" class="soft-button">Очистить кэш</button></div>
     </div>
   </aside>
 
-  <aside id="selectedInfo" class="info-card panel hidden">
-    <button id="infoClose" class="info-close" aria-label="Закрыть">×</button>
-    <div id="selectedSystem" class="info-kicker"></div>
-    <h1 id="selectedName"></h1>
-    <div id="selectedEnglish" class="latin"></div>
-    <div class="info-meta">
-      <span id="selectedId"></span>
-      <span id="selectedSize"></span>
+  <aside id="selectedInfo" class="inspector glass hidden">
+    <div class="inspector-head">
+      <div><span id="selectedSystem" class="info-kicker"></span><h1 id="selectedName"></h1><div id="selectedEnglish" class="latin"></div></div>
+      <button id="inspectorClose" class="icon-button">×</button>
     </div>
-    <p id="selectedDescription" class="description"></p>
-    <button id="focusButton" class="focus-button">Приблизить</button>
+    <div class="info-meta"><span id="selectedId"></span><span id="selectedSize"></span></div>
+    <div class="inspector-tabs"><button class="active">Обзор</button><button>Связи</button></div>
+    <section class="info-section"><h3>Описание</h3><p id="selectedDescription"></p></section>
+    <section class="info-section"><h3>Расположение</h3><p id="selectedLocation"></p></section>
+    <section class="info-section"><h3>Функции</h3><ul id="selectedFunctions"></ul></section>
+    <section class="info-section"><h3>Связанные структуры</h3><div id="relatedStructures" class="related-list"></div></section>
+    <div class="inspector-actions">
+      <button id="focusButton" class="primary-button">Приблизить</button>
+      <select id="isolateContext" class="select-control"><option value="single">Только объект</option><option value="related">Объект и связи</option><option value="system">Вся система</option></select>
+      <button id="isolateButton" class="soft-button">Изолировать</button>
+    </div>
   </aside>
-  <div id="emptyInfo" class="hidden"></div>
 
-  <div id="loadingPanel" class="loading panel">
-    <div class="loading-row">
-      <span id="loadingTitle">Загрузка модели</span>
-      <strong id="loadingPercent">0%</strong>
-    </div>
+  <section id="tourPlayer" class="tour-player glass">
+    <div class="tour-player-top"><span id="tourTitle"></span><strong id="tourProgress"></strong></div>
+    <h2 id="tourStepName"></h2><p id="tourStepText"></p>
+    <div class="tour-player-actions"><button id="tourPrev" class="soft-button">Назад</button><button id="tourNext" class="primary-button">Далее</button></div>
+  </section>
+
+  <section id="loadingPanel" class="loading-manager glass">
+    <button id="loadingToggle" class="loading-summary">
+      <span><i></i><strong id="loadingTitle">Загрузка модели</strong></span><b id="loadingPercent">0%</b>
+    </button>
     <div class="progress-track"><div id="progressBar"></div></div>
-    <div class="loading-foot">
-      <span id="loadingSubtitle">Требуется интернет</span>
-      <span><b id="loadedCount">0</b> · <b id="failedCount">0</b></span>
+    <div class="loading-details">
+      <div id="loadSystems" class="load-systems"></div>
+      <div class="loading-foot"><span><b id="loadedCount">0 загружено</b> · <b id="failedCount">0 ошибок</b></span><div><button id="retryFailed" class="text-button">Повторить ошибки</button><button id="cancelLoading" class="text-button danger">Отменить</button></div></div>
     </div>
-  </div>
+  </section>
 
-  <button id="openCredits" class="credit-link">BodyParts3D · CC BY-SA 2.1 JP</button>
+  <div id="toastStack" class="toast-stack"></div>
 
-  <dialog id="creditsDialog">
-    <button id="closeCredits" class="dialog-close" aria-label="Закрыть">×</button>
-    <h2>Источник данных</h2>
-    <p>BodyParts3D / Anatomography, © The Database Center for Life Science.</p>
-    <p>Геометрия: CC Attribution-ShareAlike 2.1 Japan.</p>
-    <p>Визуализатор является независимым учебным проектом и не предназначен для диагностики.</p>
-    <p><a href="https://github.com/Kevin-Mattheus-Moerman/BodyParts3D" target="_blank" rel="noreferrer">Открыть источник</a></p>
+  <dialog id="annotationDialog" class="app-dialog">
+    <form id="annotationForm" method="dialog">
+      <div class="dialog-head"><div><strong>Новая аннотация</strong><small>Метка сохранится в браузере</small></div><button type="button" data-dialog-close class="icon-button">×</button></div>
+      <label>Текст метки<input id="annotationText" maxlength="120" required /></label>
+      <div class="dialog-actions"><button type="button" data-dialog-close class="soft-button">Отмена</button><button type="submit" class="primary-button">Сохранить</button></div>
+    </form>
   </dialog>
 
-  <script type="module" src="./app.js?v=4-bvh-lod"></script>
-  <script>
-    const settings = document.getElementById('settingsPanel');
-    document.getElementById('settingsToggle').addEventListener('click', () => settings.classList.add('open'));
-    document.getElementById('settingsClose').addEventListener('click', () => settings.classList.remove('open'));
-    document.getElementById('infoClose').addEventListener('click', () => document.getElementById('clearSelection').click());
-    window.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') settings.classList.remove('open');
-    });
-  </script>
+  <dialog id="shareDialog" class="app-dialog">
+    <div class="dialog-head"><div><strong>Ссылка на сцену</strong><small>Сохраняет камеру, слои и выбранный объект</small></div><button data-dialog-close class="icon-button">×</button></div>
+    <input id="shareUrl" readonly />
+    <div class="dialog-actions"><button id="copyShareUrl" class="primary-button">Скопировать</button></div>
+  </dialog>
+
+  <dialog id="creditsDialog" class="app-dialog">
+    <div class="dialog-head"><div><strong>Источник данных</strong><small>Лицензия и назначение</small></div><button data-dialog-close class="icon-button">×</button></div>
+    <p>BodyParts3D / Anatomography, © The Database Center for Life Science.</p>
+    <p>Геометрия распространяется по CC Attribution-ShareAlike 2.1 Japan.</p>
+    <p>Атлас предназначен для обучения и визуализации, а не для медицинской диагностики.</p>
+    <a href="https://github.com/Kevin-Mattheus-Moerman/BodyParts3D" target="_blank" rel="noreferrer">Открыть источник</a>
+  </dialog>
+
+  <script type="module" src="./app.js?v=5-explorer"></script>
 </body>
 </html>
