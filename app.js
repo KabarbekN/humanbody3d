@@ -20,6 +20,7 @@ const layerDefinitions = {
   muscle:   { label: 'Мышцы',        color: '#8f2830', visible: true,  opacity: 1.00, order: 5 },
   skeleton: { label: 'Скелет',       color: '#e6ddc2', visible: false, opacity: 1.00, order: 2 },
   organ:    { label: 'Органы',       color: '#a85b55', visible: false, opacity: 1.00, order: 4 },
+  brain:    { label: 'Мозг',         color: '#b98783', visible: false, opacity: 1.00, order: 5 },
   artery:   { label: 'Артерии',      color: '#c52c3b', visible: false, opacity: 1.00, order: 3 },
   vein:     { label: 'Вены',         color: '#315a9e', visible: false, opacity: 1.00, order: 3 },
   nerve:    { label: 'Нервы',        color: '#d7bd55', visible: false, opacity: 1.00, order: 3 }
@@ -45,6 +46,7 @@ function defaultDescription(layer, name) {
     muscle: `${name} — сегментированная мышечная структура взрослого мужского анатомического эталона.`,
     skeleton: `${name} — сегментированная костная структура взрослого мужского анатомического эталона.`,
     organ: `${name} — сегментированная внутренняя анатомическая структура.`,
+    brain: `${name} — сегментированная структура головного мозга взрослого мужского анатомического эталона.`,
     artery: `${name} — сегмент артериального русла.`,
     vein: `${name} — сегмент венозного русла.`,
     nerve: `${name} — сегмент нервной системы.`
@@ -219,22 +221,95 @@ const catalog = [
   part('FMA22544', 'Правая передняя большеберцовая мышца', 'Right tibialis anterior', 'muscle'),
   part('FMA22545', 'Левая передняя большеберцовая мышца', 'Left tibialis anterior', 'muscle'),
 
-  // Internal organs — verified actual meshes where available
+  // Internal organs — real BodyParts3D meshes
+  part('FMA7274', 'Стенка сердца', 'Wall of heart', 'organ', { color: '#7f202c' }),
   part('FMA7333', 'Верхняя доля правого лёгкого', 'Upper lobe of right lung', 'organ', { color: '#b87a78' }),
   part('FMA7383', 'Средняя доля правого лёгкого', 'Middle lobe of right lung', 'organ', { color: '#b87a78' }),
   part('FMA7337', 'Нижняя доля правого лёгкого', 'Lower lobe of right lung', 'organ', { color: '#aa6869' }),
   part('FMA7370', 'Верхняя доля левого лёгкого', 'Upper lobe of left lung', 'organ', { color: '#b87a78' }),
   part('FMA7371', 'Нижняя доля левого лёгкого', 'Lower lobe of left lung', 'organ', { color: '#aa6869' }),
+  part('FMA7394', 'Трахея', 'Trachea', 'organ', { color: '#c8a98a' }),
+  part('FMA7409', 'Бронх', 'Bronchus', 'organ', { color: '#c8a98a', core: false }),
+  part('FMA7131', 'Пищевод', 'Esophagus', 'organ', { color: '#a96f68' }),
   part('FMA7197', 'Печень', 'Liver', 'organ', { color: '#71353a' }),
+  part('FMA7202', 'Жёлчный пузырь', 'Gallbladder', 'organ', { color: '#55733d' }),
   part('FMA7148', 'Желудок', 'Stomach', 'organ', { color: '#b06f65' }),
   part('FMA7198nsn', 'Поджелудочная железа', 'Pancreas', 'organ', { color: '#c69a69' }),
-  part('FMA14543nsn', 'Ободочная кишка', 'Colon', 'organ', { color: '#b88874' }),
+  part('FMA7206', 'Двенадцатиперстная кишка', 'Duodenum', 'organ', { color: '#b88772' }),
+  part('FMA7207', 'Тощая кишка', 'Jejunum', 'organ', { color: '#c2917a' }),
+  part('FMA7208', 'Подвздошная кишка', 'Ileum', 'organ', { color: '#c2917a' }),
+  part('FMA14543nsn', 'Ободочная кишка', 'Colon', 'organ', { color: '#a97b67' }),
+  part('FMA14542', 'Червеобразный отросток', 'Appendix', 'organ', { color: '#b57f70', core: false }),
+  part('FMA14544', 'Прямая кишка', 'Rectum', 'organ', { color: '#9c665d' }),
+  part('FMA7196', 'Селезёнка', 'Spleen', 'organ', { color: '#70405a' }),
   part('FMA7204', 'Правая почка', 'Right kidney', 'organ', { color: '#71343e' }),
   part('FMA7205', 'Левая почка', 'Left kidney', 'organ', { color: '#71343e' }),
   part('FMA15629', 'Правый надпочечник', 'Right adrenal gland', 'organ', { color: '#9b7448', core: false }),
   part('FMA15630', 'Левый надпочечник', 'Left adrenal gland', 'organ', { color: '#9b7448', core: false }),
   part('FMA15571', 'Правый мочеточник', 'Right ureter', 'organ', { color: '#c49a72', core: false }),
   part('FMA15572', 'Левый мочеточник', 'Left ureter', 'organ', { color: '#c49a72', core: false }),
+  part('FMA15900', 'Мочевой пузырь', 'Urinary bladder', 'organ', { color: '#c7a06f' }),
+  part('FMA71194', 'Правая доля тимуса', 'Right lobe of thymus', 'organ', { color: '#b98f79', core: false }),
+  part('FMA71195', 'Левая доля тимуса', 'Left lobe of thymus', 'organ', { color: '#b98f79', core: false }),
+
+  // Male reproductive organs — optional detailed set
+  part('FMA9600', 'Предстательная железа', 'Prostate', 'organ', { color: '#a77a67', core: false }),
+  part('FMA7211', 'Правое яичко', 'Right testis', 'organ', { color: '#c8a28b', core: false }),
+  part('FMA7212', 'Левое яичко', 'Left testis', 'organ', { color: '#c8a28b', core: false }),
+  part('FMA19387', 'Правый семенной пузырёк', 'Right seminal vesicle', 'organ', { color: '#a78d62', core: false }),
+  part('FMA19388', 'Левый семенной пузырёк', 'Left seminal vesicle', 'organ', { color: '#a78d62', core: false }),
+
+  // Brain — cortical surface and major internal structures
+  part('FMA72653', 'Правая верхняя лобная извилина', 'Right superior frontal gyrus', 'brain', { color: '#ba817e' }),
+  part('FMA72654', 'Левая верхняя лобная извилина', 'Left superior frontal gyrus', 'brain', { color: '#ba817e' }),
+  part('FMA72655', 'Правая средняя лобная извилина', 'Right middle frontal gyrus', 'brain', { color: '#b47776' }),
+  part('FMA72656', 'Левая средняя лобная извилина', 'Left middle frontal gyrus', 'brain', { color: '#b47776' }),
+  part('FMA72661', 'Правая прецентральная извилина', 'Right precentral gyrus', 'brain', { color: '#bd8580' }),
+  part('FMA72662', 'Левая прецентральная извилина', 'Left precentral gyrus', 'brain', { color: '#bd8580' }),
+  part('FMA72665', 'Правая постцентральная извилина', 'Right postcentral gyrus', 'brain', { color: '#ad7779' }),
+  part('FMA72666', 'Левая постцентральная извилина', 'Left postcentral gyrus', 'brain', { color: '#ad7779' }),
+  part('FMA72667', 'Правая надкраевая извилина', 'Right supramarginal gyrus', 'brain', { color: '#a87378' }),
+  part('FMA72668', 'Левая надкраевая извилина', 'Left supramarginal gyrus', 'brain', { color: '#a87378' }),
+  part('FMA72669', 'Правая угловая извилина', 'Right angular gyrus', 'brain', { color: '#a46f75' }),
+  part('FMA72670', 'Левая угловая извилина', 'Left angular gyrus', 'brain', { color: '#a46f75' }),
+  part('FMA72800', 'Передняя часть правой верхней височной извилины', 'Anterior part of right superior temporal gyrus', 'brain', { color: '#a86f70' }),
+  part('FMA72801', 'Передняя часть левой верхней височной извилины', 'Anterior part of left superior temporal gyrus', 'brain', { color: '#a86f70' }),
+  part('FMA72804', 'Задняя часть правой верхней височной извилины', 'Posterior part of right superior temporal gyrus', 'brain', { color: '#a4696d' }),
+  part('FMA72805', 'Задняя часть левой верхней височной извилины', 'Posterior part of left superior temporal gyrus', 'brain', { color: '#a4696d' }),
+  part('FMA72685', 'Правая средняя височная извилина', 'Right middle temporal gyrus', 'brain', { color: '#9f676c' }),
+  part('FMA72686', 'Левая средняя височная извилина', 'Left middle temporal gyrus', 'brain', { color: '#9f676c' }),
+  part('FMA72687', 'Правая нижняя височная извилина', 'Right inferior temporal gyrus', 'brain', { color: '#965f66' }),
+  part('FMA72688', 'Левая нижняя височная извилина', 'Left inferior temporal gyrus', 'brain', { color: '#965f66' }),
+  part('FMA72689', 'Правая веретенообразная извилина', 'Right fusiform gyrus', 'brain', { color: '#8e5e67' }),
+  part('FMA72690', 'Левая веретенообразная извилина', 'Left fusiform gyrus', 'brain', { color: '#8e5e67' }),
+  part('FMA72975', 'Правая затылочная доля', 'Right occipital lobe', 'brain', { color: '#9c707c' }),
+  part('FMA72976', 'Левая затылочная доля', 'Left occipital lobe', 'brain', { color: '#9c707c' }),
+  part('FMA67944', 'Мозжечок', 'Cerebellum', 'brain', { color: '#a87570' }),
+  part('FMA67943', 'Мост', 'Pons', 'brain', { color: '#c19487' }),
+  part('FMA62004', 'Продолговатый мозг', 'Medulla oblongata', 'brain', { color: '#c29b8c' }),
+  part('FMA61993nsn', 'Средний мозг', 'Midbrain', 'brain', { color: '#b4867d' }),
+  part('FMA258714', 'Правый таламус', 'Right thalamus', 'brain', { color: '#a87383' }),
+  part('FMA258716', 'Левый таламус', 'Left thalamus', 'brain', { color: '#a87383' }),
+  part('FMA62008nsn', 'Гипоталамус', 'Hypothalamus', 'brain', { color: '#ad7e72', core: false }),
+  part('FMA86464', 'Мозолистое тело', 'Corpus callosum', 'brain', { color: '#d8c8b4' }),
+  part('FMA72717', 'Правая поясная извилина', 'Right cingulate gyrus', 'brain', { color: '#aa7c78', core: false }),
+  part('FMA72718', 'Левая поясная извилина', 'Left cingulate gyrus', 'brain', { color: '#aa7c78', core: false }),
+  part('FMA72705', 'Правая парагиппокампальная извилина', 'Right parahippocampal gyrus', 'brain', { color: '#9b6e70', core: false }),
+  part('FMA72706', 'Левая парагиппокампальная извилина', 'Left parahippocampal gyrus', 'brain', { color: '#9b6e70', core: false }),
+  part('FMA72713', 'Правый гиппокамп', 'Right hippocampus', 'brain', { color: '#b58a68', core: false }),
+  part('FMA72714', 'Левый гиппокамп', 'Left hippocampus', 'brain', { color: '#b58a68', core: false }),
+  part('FMA72832', 'Правая миндалина', 'Right amygdala', 'brain', { color: '#9a5c63', core: false }),
+  part('FMA72833', 'Левая миндалина', 'Left amygdala', 'brain', { color: '#9a5c63', core: false }),
+  part('FMA72826', 'Правое хвостатое ядро', 'Right caudate nucleus', 'brain', { color: '#a8746b', core: false }),
+  part('FMA72827', 'Левое хвостатое ядро', 'Left caudate nucleus', 'brain', { color: '#a8746b', core: false }),
+  part('FMA72828', 'Правая скорлупа', 'Right putamen', 'brain', { color: '#93616d', core: false }),
+  part('FMA72829', 'Левая скорлупа', 'Left putamen', 'brain', { color: '#93616d', core: false }),
+  part('FMA72830', 'Правый бледный шар', 'Right globus pallidus', 'brain', { color: '#c09c86', core: false }),
+  part('FMA72831', 'Левый бледный шар', 'Left globus pallidus', 'brain', { color: '#c09c86', core: false }),
+  part('FMA78449', 'Правый боковой желудочек', 'Right lateral ventricle', 'brain', { color: '#73a8bd', core: false }),
+  part('FMA78450', 'Левый боковой желудочек', 'Left lateral ventricle', 'brain', { color: '#73a8bd', core: false }),
+  part('FMA13889', 'Гипофиз', 'Pituitary gland', 'brain', { color: '#b98475', core: false }),
+  part('FMA62033', 'Шишковидное тело', 'Pineal body', 'brain', { color: '#c6a06b', core: false }),
 
   // Major vessels
   part('FMA3786', 'Грудная аорта', 'Thoracic aorta', 'artery'),
@@ -257,9 +332,17 @@ const catalog = [
   part('FMA66643', 'Лёгочная вена', 'Pulmonary vein', 'vein'),
 
   // Nervous structures
+  part('FMA7647', 'Спинной мозг', 'Spinal cord', 'nerve'),
   part('FMA50875', 'Правый зрительный нерв', 'Right optic nerve', 'nerve', { core: false }),
-  part('FMA50878', 'Левый зрительный нерв', 'Left optic nerve', 'nerve', { core: false })
+  part('FMA50878', 'Левый зрительный нерв', 'Left optic nerve', 'nerve', { core: false }),
+  part('FMA62382', 'Правый зрительный тракт', 'Right optic tract', 'nerve', { core: false }),
+  part('FMA67936', 'Левый зрительный тракт', 'Left optic tract', 'nerve', { core: false })
 ];
+
+// Brain meshes are loaded on demand when the dedicated preset is opened.
+for (const entry of catalog) {
+  if (entry.layer === 'brain') entry.core = false;
+}
 
 const state = {
   layer: Object.fromEntries(Object.entries(layerDefinitions).map(([key, value]) => [key, { visible: value.visible, opacity: value.opacity }])),
@@ -378,7 +461,7 @@ function getMaterial(entry) {
   const color = new THREE.Color(entry.color || base.color);
   const common = {
     color,
-    roughness: entry.layer === 'skin' ? 0.72 : entry.layer === 'skeleton' ? 0.78 : 0.64,
+    roughness: entry.layer === 'skin' ? 0.72 : entry.layer === 'skeleton' ? 0.78 : entry.layer === 'brain' ? 0.7 : 0.64,
     metalness: 0,
     transparent: true,
     opacity: state.layer[entry.layer].opacity,
@@ -404,6 +487,16 @@ function getMaterial(entry) {
       sheenColor: new THREE.Color(0x4a0710),
       sheenRoughness: 0.8,
       clearcoat: 0.025
+    });
+  }
+  if (entry.layer === 'brain') {
+    return new THREE.MeshPhysicalMaterial({
+      ...common,
+      sheen: 0.34,
+      sheenColor: color.clone().multiplyScalar(0.72),
+      sheenRoughness: 0.76,
+      clearcoat: 0.055,
+      clearcoatRoughness: 0.62
     });
   }
   if (entry.layer === 'organ') {
@@ -574,19 +667,22 @@ function applyLayerState() {
 function applyPreset(name) {
   const presets = {
     skin: {
-      skin: [true, .86], muscle: [false, 1], skeleton: [false, 1], organ: [false, 1], artery: [false, 1], vein: [false, 1], nerve: [false, 1]
+      skin: [true, .86], muscle: [false, 1], skeleton: [false, 1], organ: [false, 1], brain: [false, 1], artery: [false, 1], vein: [false, 1], nerve: [false, 1]
     },
     muscles: {
-      skin: [false, .18], muscle: [true, 1], skeleton: [false, 1], organ: [false, 1], artery: [false, 1], vein: [false, 1], nerve: [false, 1]
+      skin: [false, .18], muscle: [true, 1], skeleton: [false, 1], organ: [false, 1], brain: [false, 1], artery: [false, 1], vein: [false, 1], nerve: [false, 1]
     },
     skeleton: {
-      skin: [false, .12], muscle: [false, .2], skeleton: [true, 1], organ: [false, 1], artery: [false, 1], vein: [false, 1], nerve: [false, 1]
+      skin: [false, .12], muscle: [false, .2], skeleton: [true, 1], organ: [false, 1], brain: [false, 1], artery: [false, 1], vein: [false, 1], nerve: [false, 1]
+    },
+    brain: {
+      skin: [false, .08], muscle: [false, .08], skeleton: [false, .12], organ: [false, 1], brain: [true, 1], artery: [false, 1], vein: [false, 1], nerve: [true, .88]
     },
     internal: {
-      skin: [false, .1], muscle: [true, .13], skeleton: [true, .13], organ: [true, 1], artery: [true, 1], vein: [true, 1], nerve: [true, 1]
+      skin: [false, .1], muscle: [true, .12], skeleton: [true, .12], organ: [true, 1], brain: [false, 1], artery: [true, 1], vein: [true, 1], nerve: [true, 1]
     },
     all: {
-      skin: [true, .1], muscle: [true, .35], skeleton: [true, .72], organ: [true, .95], artery: [true, 1], vein: [true, 1], nerve: [true, 1]
+      skin: [true, .1], muscle: [true, .34], skeleton: [true, .7], organ: [true, .95], brain: [true, .96], artery: [true, 1], vein: [true, 1], nerve: [true, 1]
     }
   };
   const preset = presets[name];
@@ -598,6 +694,34 @@ function applyPreset(name) {
   }
   document.querySelectorAll('.preset').forEach(btn => btn.classList.toggle('active', btn.dataset.preset === name));
   applyLayerState();
+
+  if (name === 'brain') {
+    state.targetLookAt = new THREE.Vector3(0, 2.45, 0);
+    state.targetCamera = new THREE.Vector3(0, 2.45, 3.05);
+  }
+}
+
+async function ensurePresetData(name) {
+  const definitions = {
+    brain: { layers: ['brain', 'nerve'], title: 'Загрузка мозга' },
+    internal: { layers: ['organ'], title: 'Загрузка органов' }
+  };
+  const definition = definitions[name];
+  if (!definition) return;
+
+  const entries = catalog.filter(entry => definition.layers.includes(entry.layer));
+  const pending = entries.filter(entry => !state.loaded.has(entry.id) && !state.failed.has(entry.id));
+  if (!pending.length) return;
+
+  setConnectionStatus('loading', definition.title.toLocaleLowerCase('ru'));
+  await runQueue(entries, 5, definition.title);
+  setLoadingVisible(false);
+  setConnectionStatus('ready', `${state.loaded.size} структур`);
+}
+
+async function activatePreset(name) {
+  await ensurePresetData(name);
+  applyPreset(name);
 }
 
 function buildLayerControls() {
@@ -792,7 +916,7 @@ function renderSearch(query) {
 
 function bindUI() {
   buildLayerControls();
-  document.querySelectorAll('.preset').forEach(button => button.addEventListener('click', () => applyPreset(button.dataset.preset)));
+  document.querySelectorAll('.preset').forEach(button => button.addEventListener('click', () => activatePreset(button.dataset.preset)));
   document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => setView(button.dataset.view)));
   document.getElementById('resetLayers').addEventListener('click', () => applyPreset('muscles'));
   document.getElementById('loadDetail').addEventListener('click', loadDetailedSet);
