@@ -2,11 +2,6 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
-import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const REMOTE_ROOT = 'https://raw.githubusercontent.com/Kevin-Mattheus-Moerman/BodyParts3D/main/assets/BodyParts3D_data/stl/';
 const RAW_ROOT = new URLSearchParams(location.search).get('assets') === 'local' ? './models/' : REMOTE_ROOT;
@@ -14,6 +9,15 @@ const WORLD_HEIGHT = 6.4;
 const REFERENCE_HEIGHT_CM = 175;
 const canvas = document.getElementById('sceneCanvas');
 const viewport = document.getElementById('viewport');
+
+// Lightweight renderer profile for large anatomical datasets.
+// Override manually with ?quality=low or ?quality=high.
+const qualityMode = new URLSearchParams(location.search).get('quality') || 'auto';
+const compactDevice = matchMedia('(max-width: 900px), (pointer: coarse)').matches
+  || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4)
+  || (navigator.deviceMemory && navigator.deviceMemory <= 4);
+const lowQuality = qualityMode === 'low' || (qualityMode === 'auto' && compactDevice);
+const maxPixelRatio = qualityMode === 'high' ? 1.5 : lowQuality ? 1 : 1.25;
 
 const layerDefinitions = {
   skin:     { label: 'Кожа',         color: '#bd826d', visible: false, opacity: 0.24, order: 6 },
@@ -369,13 +373,18 @@ scene.fog = new THREE.FogExp2(0x080c11, 0.035);
 const camera = new THREE.PerspectiveCamera(34, 1, 0.01, 100);
 camera.position.set(0, 0.15, 9.3);
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({
+  canvas,
+  antialias: !lowQuality,
+  powerPreference: 'high-performance',
+  alpha: false,
+  stencil: false
+});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxPixelRatio));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.12;
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = false;
 renderer.localClippingEnabled = true;
 
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
@@ -398,12 +407,7 @@ const hemi = new THREE.HemisphereLight(0xddeeff, 0x1c1412, 1.55);
 scene.add(hemi);
 const key = new THREE.DirectionalLight(0xfff4e8, 3.7);
 key.position.set(4.5, 7, 6);
-key.castShadow = true;
-key.shadow.mapSize.set(2048, 2048);
-key.shadow.camera.left = -5;
-key.shadow.camera.right = 5;
-key.shadow.camera.top = 6;
-key.shadow.camera.bottom = -6;
+key.castShadow = false;
 scene.add(key);
 const fill = new THREE.DirectionalLight(0x78c9ff, 1.6);
 fill.position.set(-5, 2, 4);
@@ -418,7 +422,7 @@ const ground = new THREE.Mesh(
 );
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = -WORLD_HEIGHT / 2 - 0.11;
-ground.receiveShadow = true;
+ground.receiveShadow = false;
 scene.add(ground);
 
 const glowRing = new THREE.Mesh(
@@ -429,25 +433,6 @@ glowRing.rotation.x = -Math.PI / 2;
 glowRing.position.y = ground.position.y + 0.008;
 scene.add(glowRing);
 
-const composer = new EffectComposer(renderer);
-const renderPass = new RenderPass(scene, camera);
-composer.addPass(renderPass);
-const ssaoPass = new SSAOPass(scene, camera, 1, 1);
-ssaoPass.kernelRadius = 14;
-ssaoPass.minDistance = 0.002;
-ssaoPass.maxDistance = 0.11;
-ssaoPass.output = SSAOPass.OUTPUT.Default;
-composer.addPass(ssaoPass);
-const outlinePass = new OutlinePass(new THREE.Vector2(1, 1), scene, camera);
-outlinePass.edgeStrength = 4.2;
-outlinePass.edgeGlow = 0.6;
-outlinePass.edgeThickness = 1.25;
-outlinePass.pulsePeriod = 0;
-outlinePass.visibleEdgeColor.set(0x7ee8ff);
-outlinePass.hiddenEdgeColor.set(0x265b6e);
-composer.addPass(outlinePass);
-composer.addPass(new OutputPass());
-
 const clippingPlane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0);
 const loader = new STLLoader();
 const raycaster = new THREE.Raycaster();
@@ -455,6 +440,35 @@ const pointer = new THREE.Vector2();
 const pointerStart = new THREE.Vector2();
 let hoverObject = null;
 let anchorReady = false;
+let interactionCandidates = [];
+let frameHandle = 0;
+let needsRender = true;
+let controlsActive = false;
+let lastFrameTime = performance.now();
+let renderingFrame = false;
+
+function invalidate() {
+  needsRender = true;
+  if (!frameHandle && !renderingFrame) frameHandle = requestAnimationFrame(renderFrame);
+}
+
+function rebuildInteractionCandidates() {
+  interactionCandidates = [...state.loaded.values()].filter(mesh => {
+    if (!mesh.visible || mesh.material.opacity <= 0.06) return false;
+    const entry = mesh.userData.entry;
+    return !(entry.layer === 'skin' && mesh.material.opacity < 0.35);
+  });
+  if (hoverObject && !interactionCandidates.includes(hoverObject)) {
+    hoverObject = null;
+    document.getElementById('hoverLabel').style.display = 'none';
+  }
+}
+
+function applySelectionHighlight(mesh, enabled) {
+  if (!mesh?.material?.emissive) return;
+  mesh.material.emissive.setHex(enabled ? 0x0b637b : 0x000000);
+  mesh.material.emissiveIntensity = enabled ? 0.9 : 0;
+}
 
 function getMaterial(entry) {
   const base = layerDefinitions[entry.layer];
@@ -467,8 +481,9 @@ function getMaterial(entry) {
     opacity: state.layer[entry.layer].opacity,
     depthWrite: state.layer[entry.layer].opacity > 0.55,
     side: entry.layer === 'skin' ? THREE.DoubleSide : THREE.FrontSide,
-    clippingPlanes: state.clipEnabled ? [clippingPlane] : [],
-    clipShadows: true
+    emissive: new THREE.Color(0x000000),
+    emissiveIntensity: 0,
+    clippingPlanes: state.clipEnabled ? [clippingPlane] : []
   };
   if (entry.layer === 'skin') {
     return new THREE.MeshPhysicalMaterial({
@@ -516,7 +531,7 @@ async function loadPart(entry) {
   if (state.loaded.has(entry.id) || state.failed.has(entry.id)) return state.loaded.get(entry.id) || null;
   try {
     const geometry = await loader.loadAsync(`${RAW_ROOT}${entry.file}`);
-    geometry.computeVertexNormals();
+    if (!geometry.getAttribute('normal')) geometry.computeVertexNormals();
     geometry.computeBoundingBox();
     geometry.computeBoundingSphere();
 
@@ -525,11 +540,13 @@ async function loadPart(entry) {
     mesh.userData.entry = entry;
     mesh.userData.localCenter = geometry.boundingBox.getCenter(new THREE.Vector3());
     mesh.visible = state.layer[entry.layer].visible;
-    mesh.castShadow = entry.layer !== 'skin';
-    mesh.receiveShadow = true;
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
     mesh.renderOrder = layerDefinitions[entry.layer].order;
     anatomyRoot.add(mesh);
     state.loaded.set(entry.id, mesh);
+    rebuildInteractionCandidates();
+    invalidate();
 
     if (entry.id === 'FMA7163') {
       orientAndScaleFromAnchor(mesh);
@@ -654,14 +671,27 @@ function applyLayerState() {
   for (const mesh of state.loaded.values()) {
     const entry = mesh.userData.entry;
     const layer = state.layer[entry.layer];
+    const material = mesh.material;
+    const nextTransparent = layer.opacity < 1 || entry.layer === 'skin';
+    const nextDepthWrite = layer.opacity > 0.55;
+    const hadClipping = Boolean(material.clippingPlanes?.length);
+
     mesh.visible = state.isolated ? mesh === state.selected : layer.visible;
-    mesh.material.opacity = layer.opacity;
-    mesh.material.transparent = layer.opacity < 1 || entry.layer === 'skin';
-    mesh.material.depthWrite = layer.opacity > 0.55;
-    mesh.material.clippingPlanes = state.clipEnabled ? [clippingPlane] : [];
-    mesh.material.needsUpdate = true;
+    material.opacity = layer.opacity;
+
+    const shaderStateChanged = material.transparent !== nextTransparent
+      || material.depthWrite !== nextDepthWrite
+      || hadClipping !== state.clipEnabled;
+
+    material.transparent = nextTransparent;
+    material.depthWrite = nextDepthWrite;
+    material.clippingPlanes = state.clipEnabled ? [clippingPlane] : [];
+    if (shaderStateChanged) material.needsUpdate = true;
   }
+  if (state.selected) applySelectionHighlight(state.selected, true);
+  rebuildInteractionCandidates();
   updateLayerControls();
+  invalidate();
 }
 
 function applyPreset(name) {
@@ -776,33 +806,38 @@ function applyExplode() {
     const layerBoost = (layerDefinitions[mesh.userData.entry.layer].order - 2) * 0.08;
     mesh.position.copy(direction.multiplyScalar(localAmount * (1 + layerBoost)));
   }
+  invalidate();
 }
 
 function updateClipping() {
   const span = WORLD_HEIGHT * 0.55;
   clippingPlane.constant = (state.clipValue / 100) * span;
   for (const mesh of state.loaded.values()) {
+    const hadClipping = Boolean(mesh.material.clippingPlanes?.length);
     mesh.material.clippingPlanes = state.clipEnabled ? [clippingPlane] : [];
-    mesh.material.needsUpdate = true;
+    if (hadClipping !== state.clipEnabled) mesh.material.needsUpdate = true;
   }
+  invalidate();
 }
 
 function selectMesh(mesh, focus = false) {
   if (!mesh) return clearSelection();
+  if (state.selected && state.selected !== mesh) applySelectionHighlight(state.selected, false);
   state.selected = mesh;
-  outlinePass.selectedObjects = [mesh];
+  applySelectionHighlight(mesh, true);
   document.getElementById('emptyInfo').classList.add('hidden');
   document.getElementById('selectedInfo').classList.remove('hidden');
   document.getElementById('isolateButton').disabled = false;
   document.getElementById('clearSelection').disabled = false;
   updateSelectedInfo(mesh);
   if (focus) focusOn(mesh);
+  invalidate();
 }
 
 function clearSelection() {
+  if (state.selected) applySelectionHighlight(state.selected, false);
   state.selected = null;
   state.isolated = false;
-  outlinePass.selectedObjects = [];
   document.getElementById('emptyInfo').classList.remove('hidden');
   document.getElementById('selectedInfo').classList.add('hidden');
   document.getElementById('isolateButton').disabled = true;
@@ -833,6 +868,7 @@ function focusOn(mesh) {
   const direction = camera.position.clone().sub(controls.target).normalize();
   state.targetLookAt = center;
   state.targetCamera = center.clone().add(direction.multiplyScalar(radius * 3.2 + 0.28));
+  invalidate();
 }
 
 function setView(view) {
@@ -846,6 +882,7 @@ function setView(view) {
   };
   state.targetLookAt = new THREE.Vector3(0, 0, 0);
   state.targetCamera = positions[view] || positions.reset;
+  invalidate();
 }
 
 function getIntersections(event) {
@@ -853,12 +890,7 @@ function getIntersections(event) {
   pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
-  const candidates = [...state.loaded.values()].filter(mesh => {
-    if (!mesh.visible || mesh.material.opacity <= 0.06) return false;
-    const entry = mesh.userData.entry;
-    return !(entry.layer === 'skin' && mesh.material.opacity < 0.35);
-  });
-  return raycaster.intersectObjects(candidates, false);
+  return raycaster.intersectObjects(interactionCandidates, false);
 }
 
 canvas.addEventListener('pointerdown', event => pointerStart.set(event.clientX, event.clientY));
@@ -868,22 +900,53 @@ canvas.addEventListener('pointerup', event => {
   const hit = getIntersections(event)[0];
   if (hit) selectMesh(hit.object);
 });
-canvas.addEventListener('pointermove', event => {
-  const hit = getIntersections(event)[0];
+const HOVER_INTERVAL_MS = lowQuality ? 120 : 75;
+let lastHoverCheck = 0;
+let hoverTimer = 0;
+let pendingHoverPoint = null;
+
+function updateHover(point) {
+  lastHoverCheck = performance.now();
+  const hit = getIntersections(point)[0];
   hoverObject = hit?.object || null;
   const label = document.getElementById('hoverLabel');
   if (hoverObject) {
     canvas.style.cursor = 'pointer';
     label.style.display = 'block';
-    label.style.left = `${event.clientX}px`;
-    label.style.top = `${event.clientY}px`;
+    label.style.left = `${point.clientX}px`;
+    label.style.top = `${point.clientY}px`;
     label.textContent = hoverObject.userData.entry.ru;
   } else {
-    canvas.style.cursor = 'grab';
+    canvas.style.cursor = controlsActive ? 'grabbing' : 'grab';
     label.style.display = 'none';
   }
-});
+}
+
+canvas.addEventListener('pointermove', event => {
+  pendingHoverPoint = { clientX: event.clientX, clientY: event.clientY };
+  const label = document.getElementById('hoverLabel');
+  if (hoverObject) {
+    label.style.left = `${event.clientX}px`;
+    label.style.top = `${event.clientY}px`;
+  }
+  const elapsed = performance.now() - lastHoverCheck;
+  if (elapsed >= HOVER_INTERVAL_MS) {
+    if (hoverTimer) clearTimeout(hoverTimer);
+    hoverTimer = 0;
+    updateHover(pendingHoverPoint);
+    return;
+  }
+  if (!hoverTimer) {
+    hoverTimer = setTimeout(() => {
+      hoverTimer = 0;
+      if (pendingHoverPoint) updateHover(pendingHoverPoint);
+    }, HOVER_INTERVAL_MS - elapsed);
+  }
+}, { passive: true });
 canvas.addEventListener('pointerleave', () => {
+  if (hoverTimer) clearTimeout(hoverTimer);
+  hoverTimer = 0;
+  pendingHoverPoint = null;
   document.getElementById('hoverLabel').style.display = 'none';
   hoverObject = null;
 });
@@ -976,32 +1039,55 @@ function resize() {
   const height = viewport.clientHeight;
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxPixelRatio));
   renderer.setSize(width, height, false);
-  composer.setSize(width, height);
-  ssaoPass.setSize(width, height);
-  outlinePass.setSize(width, height);
+  invalidate();
 }
-window.addEventListener('resize', resize);
+window.addEventListener('resize', resize, { passive: true });
 
-const clock = new THREE.Clock();
-function animate() {
-  requestAnimationFrame(animate);
-  const dt = Math.min(clock.getDelta(), 0.05);
-  controls.update();
-  glowRing.rotation.z += dt * 0.04;
+controls.addEventListener('start', () => {
+  controlsActive = true;
+  canvas.style.cursor = 'grabbing';
+  invalidate();
+});
+controls.addEventListener('change', invalidate);
+controls.addEventListener('end', () => {
+  controlsActive = false;
+  canvas.style.cursor = hoverObject ? 'pointer' : 'grab';
+  invalidate();
+});
+
+function renderFrame(now) {
+  frameHandle = 0;
+  renderingFrame = true;
+  const dt = Math.min((now - lastFrameTime) / 1000, 0.05);
+  lastFrameTime = now;
+  needsRender = false;
+
+  let keepAnimating = controls.update() === true;
 
   if (state.targetCamera && state.targetLookAt) {
-    camera.position.lerp(state.targetCamera, 1 - Math.pow(0.001, dt));
-    controls.target.lerp(state.targetLookAt, 1 - Math.pow(0.001, dt));
+    const factor = 1 - Math.pow(0.001, dt);
+    camera.position.lerp(state.targetCamera, factor);
+    controls.target.lerp(state.targetLookAt, factor);
+    keepAnimating = true;
     if (camera.position.distanceTo(state.targetCamera) < 0.01 && controls.target.distanceTo(state.targetLookAt) < 0.01) {
+      camera.position.copy(state.targetCamera);
+      controls.target.copy(state.targetLookAt);
       state.targetCamera = null;
       state.targetLookAt = null;
     }
   }
-  composer.render();
+
+  renderer.render(scene, camera);
+  renderingFrame = false;
+
+  if ((needsRender || keepAnimating || controlsActive || state.targetCamera) && !frameHandle) {
+    frameHandle = requestAnimationFrame(renderFrame);
+  }
 }
 
 bindUI();
 resize();
-animate();
+invalidate();
 startLoading();
