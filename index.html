@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#080d12" />
+  <meta name="description" content="Интерактивный 3D-анатомический атлас на Three.js и BodyParts3D." />
+  <title>3D Anatomy Atlas</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.167.1/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.167.1/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <main id="viewport" aria-label="3D-анатомическая модель">
+    <canvas id="sceneCanvas"></canvas>
+    <div id="hoverLabel" class="hover-label"></div>
+  </main>
+
+  <header class="topbar panel">
+    <strong>3D Anatomy</strong>
+    <span id="connectionStatus" class="status-dot"><i></i>загрузка</span>
+    <span id="datasetBadge" class="mesh-count">0</span>
+  </header>
+
+  <div class="search-wrap panel">
+    <span class="search-icon">⌕</span>
+    <input id="searchInput" type="search" placeholder="Найти структуру" autocomplete="off" />
+    <div id="searchResults" class="search-results"></div>
+  </div>
+
+  <nav class="preset-bar panel" aria-label="Слои">
+    <button class="preset" data-preset="skin">Кожа</button>
+    <button class="preset active" data-preset="muscles">Мышцы</button>
+    <button class="preset" data-preset="skeleton">Скелет</button>
+    <button class="preset" data-preset="internal">Органы</button>
+    <button class="preset" data-preset="all">Все</button>
+  </nav>
+
+  <div class="quick-actions panel">
+    <button id="settingsToggle" aria-label="Настройки" title="Настройки">☰</button>
+    <button data-view="front" aria-label="Вид спереди" title="Спереди">F</button>
+    <button data-view="back" aria-label="Вид сзади" title="Сзади">B</button>
+    <button data-view="left" aria-label="Вид слева" title="Слева">L</button>
+    <button data-view="right" aria-label="Вид справа" title="Справа">R</button>
+    <button data-view="reset" aria-label="Общий вид" title="Общий вид">◎</button>
+  </div>
+
+  <aside id="settingsPanel" class="settings panel" aria-label="Настройки">
+    <div class="drawer-head">
+      <strong>Настройки</strong>
+      <button id="settingsClose" aria-label="Закрыть">×</button>
+    </div>
+
+    <div id="layerControls" class="layer-list"></div>
+
+    <label class="toggle-row">
+      <span>Срез</span>
+      <input id="clipEnabled" type="checkbox" />
+    </label>
+    <label class="range-row">
+      <span>Положение</span>
+      <input id="clipSlider" type="range" min="-100" max="100" value="0" disabled />
+    </label>
+    <label class="range-row">
+      <span>Разнести</span>
+      <input id="explodeSlider" type="range" min="0" max="100" value="0" />
+    </label>
+
+    <div class="action-grid">
+      <button id="isolateButton" disabled>Изолировать</button>
+      <button id="clearSelection" disabled>Сбросить выбор</button>
+      <button id="resetLayers">Сбросить слои</button>
+      <button id="loadDetail" disabled>Больше деталей</button>
+    </div>
+  </aside>
+
+  <aside id="selectedInfo" class="info-card panel hidden">
+    <button id="infoClose" class="info-close" aria-label="Закрыть">×</button>
+    <div id="selectedSystem" class="info-kicker"></div>
+    <h1 id="selectedName"></h1>
+    <div id="selectedEnglish" class="latin"></div>
+    <div class="info-meta">
+      <span id="selectedId"></span>
+      <span id="selectedSize"></span>
+    </div>
+    <p id="selectedDescription" class="description"></p>
+    <button id="focusButton" class="focus-button">Приблизить</button>
+  </aside>
+  <div id="emptyInfo" class="hidden"></div>
+
+  <div id="loadingPanel" class="loading panel">
+    <div class="loading-row">
+      <span id="loadingTitle">Загрузка модели</span>
+      <strong id="loadingPercent">0%</strong>
+    </div>
+    <div class="progress-track"><div id="progressBar"></div></div>
+    <div class="loading-foot">
+      <span id="loadingSubtitle">Требуется интернет</span>
+      <span><b id="loadedCount">0</b> · <b id="failedCount">0</b></span>
+    </div>
+  </div>
+
+  <button id="openCredits" class="credit-link">BodyParts3D · CC BY-SA 2.1 JP</button>
+
+  <dialog id="creditsDialog">
+    <button id="closeCredits" class="dialog-close" aria-label="Закрыть">×</button>
+    <h2>Источник данных</h2>
+    <p>BodyParts3D / Anatomography, © The Database Center for Life Science.</p>
+    <p>Геометрия: CC Attribution-ShareAlike 2.1 Japan.</p>
+    <p>Визуализатор является независимым учебным проектом и не предназначен для диагностики.</p>
+    <p><a href="https://github.com/Kevin-Mattheus-Moerman/BodyParts3D" target="_blank" rel="noreferrer">Открыть источник</a></p>
+  </dialog>
+
+  <script type="module" src="./app.js"></script>
+  <script>
+    const settings = document.getElementById('settingsPanel');
+    document.getElementById('settingsToggle').addEventListener('click', () => settings.classList.add('open'));
+    document.getElementById('settingsClose').addEventListener('click', () => settings.classList.remove('open'));
+    document.getElementById('infoClose').addEventListener('click', () => document.getElementById('clearSelection').click());
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') settings.classList.remove('open');
+    });
+  </script>
+</body>
+</html>
