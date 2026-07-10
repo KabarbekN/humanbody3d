@@ -46,20 +46,6 @@ python -m http.server 8000
 
 Откройте `http://localhost:8000`.
 
-## GitHub Pages
-
-В `Settings → Pages` выберите:
-
-- Source: `Deploy from a branch`
-- Branch: `main`
-- Folder: `/(root)`
-
-Все пути в проекте относительные, поэтому он работает по адресу вида:
-
-```text
-https://username.github.io/repository-name/
-```
-
 ## Диагностические параметры
 
 ```text

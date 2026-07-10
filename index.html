@@ -8,7 +8,7 @@
   <title>3D Anatomy Explorer</title>
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" href="./icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="./styles.css?v=5" />
+  <link rel="stylesheet" href="./styles.css?v=5.1" />
   <script type="importmap">
   {
     "imports": {
@@ -28,7 +28,7 @@
 
   <header class="topbar glass">
     <div class="brand-block">
-      <button id="sidebarToggle" class="icon-button mobile-only" aria-label="Открыть навигацию">☰</button>
+      <button id="sidebarToggle" class="icon-button" aria-label="Открыть навигацию" title="Навигация">☰</button>
       <div class="brand-mark">A</div>
       <div><strong>3D Anatomy</strong><small>Explorer</small></div>
     </div>
@@ -42,8 +42,10 @@
       <span id="datasetBadge" class="dataset-badge">0 объектов</span>
       <button id="installButton" class="soft-button" hidden>Установить</button>
       <button id="shareButton" class="icon-button" title="Скопировать ссылку">↗</button>
+      <button id="sceneOnlyButton" class="icon-button" title="Только 3D-сцена">⛶</button>
     </div>
   </header>
+  <button id="sceneOnlyExit" class="scene-only-exit" title="Вернуть интерфейс">Показать интерфейс</button>
 
   <aside id="leftSidebar" class="left-sidebar glass">
     <div class="sidebar-head">
@@ -123,8 +125,14 @@
       <button id="settingsClose" class="icon-button">×</button>
     </div>
 
-    <div class="drawer-section">
-      <div class="section-title"><strong>Слои</strong><button id="loadDetail" class="text-button">Загрузить детали</button></div>
+    <div class="drawer-section layer-section">
+      <div class="section-title">
+        <div><strong>Слои и прозрачность</strong><small id="detailHint">Детали загружаются только для видимых слоёв</small></div>
+        <div class="section-actions">
+          <button id="loadDetail" class="text-button">Детали видимых</button>
+          <button id="loadAllDetail" class="text-button">Весь каталог</button>
+        </div>
+      </div>
       <div id="layerControls" class="layer-list"></div>
     </div>
 
@@ -230,6 +238,6 @@
     <a href="https://github.com/Kevin-Mattheus-Moerman/BodyParts3D" target="_blank" rel="noreferrer">Открыть источник</a>
   </dialog>
 
-  <script type="module" src="./app.js?v=5-explorer"></script>
+  <script type="module" src="./app.js?v=5.1-integrated"></script>
 </body>
 </html>

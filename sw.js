@@ -1,4 +1,4 @@
-const VERSION = 'anatomy-v5';
+const VERSION = 'anatomy-v5-1';
 const APP_CACHE = `${VERSION}-app`;
 const MODEL_CACHE = `${VERSION}-models`;
 const APP_SHELL = [

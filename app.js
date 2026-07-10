@@ -341,7 +341,18 @@ const catalog = [
 ];
 
 for (const entry of catalog) Object.assign(entry, enrichEntry(entry));
-for (const entry of catalog) if (entry.layer === 'brain') entry.core = false;
+
+// Keep the first load useful but light. Fine cortical and deep structures remain available
+// through the per-layer detail buttons instead of loading all brain meshes at once.
+const CORE_BRAIN_IDS = new Set([
+  'FMA67944', 'FMA67943', 'FMA62004', 'FMA61993nsn',
+  'FMA258714', 'FMA258716', 'FMA86464',
+  'FMA72975', 'FMA72976', 'FMA72653', 'FMA72654',
+  'FMA72661', 'FMA72662', 'FMA72665', 'FMA72666'
+]);
+for (const entry of catalog) {
+  if (entry.layer === 'brain') entry.core = CORE_BRAIN_IDS.has(entry.id);
+}
 
 const catalogById = new Map(catalog.map(entry => [entry.id, entry]));
 const systemVisibility = Object.fromEntries(SYSTEMS.map(system => [system.id, true]));
@@ -370,6 +381,7 @@ const state = {
   isolateContext: 'single',
   preset: 'muscles',
   detailLoaded: false,
+  detailLayers: new Set(),
   anchorCenter: new THREE.Vector3(),
   rootScale: 1,
   explode: 0,
@@ -389,7 +401,7 @@ const state = {
   pendingAnnotationPoint: null,
   currentTour: null,
   tourIndex: 0,
-  quiz: { targetId: null, score: 0, total: 0, locked: false },
+  quiz: { targetId: null, score: 0, total: 0, locked: false, preparing: false, visibleIds: new Set(), previousLayers: null },
   loadSession: null,
   autoUnload: false,
   hiddenSince: Object.fromEntries(Object.keys(layerDefinitions).map(key => [key, 0])),
@@ -484,6 +496,7 @@ let pendingHoverPoint = null;
 let lastHoverCheck = 0;
 let urlUpdateTimer = 0;
 let autoUnloadTimer = 0;
+let loadPipeline = Promise.resolve();
 
 function byId(id) { return document.getElementById(id); }
 function qsa(selector) { return [...document.querySelectorAll(selector)]; }
@@ -553,6 +566,7 @@ function projectedDiameterPixels(mesh) {
   return radius * 2 * viewport.clientHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov * .5)) * distance);
 }
 function isEntryVisible(entry, mesh) {
+  if (state.mode === 'quiz' && state.quiz.visibleIds.size) return state.quiz.visibleIds.has(entry.id);
   if (state.isolated) {
     if (state.isolateContext === 'single') return mesh === state.selected;
     const related = new Set([state.selectedId, ...(state.selected?.userData.entry.related || [])]);
@@ -569,7 +583,8 @@ function updateAdaptiveVisibility() {
     const baseVisible = isEntryVisible(entry, mesh);
     let detailVisible = true;
     if (baseVisible && adaptiveDetailEnabled && !state.isolated && mesh !== state.selected && entry.layer !== 'skin') {
-      detailVisible = projectedDiameterPixels(mesh) >= (entry.core ? lodPixelThreshold * .68 : lodPixelThreshold);
+      const detailBoost = state.detailLayers.has(entry.layer) ? .38 : 1;
+      detailVisible = projectedDiameterPixels(mesh) >= (entry.core ? lodPixelThreshold * .68 : lodPixelThreshold * detailBoost);
     }
     mesh.userData.detailVisible = detailVisible;
     mesh.visible = baseVisible && detailVisible;
@@ -734,8 +749,12 @@ function orientAndScaleFromAnchor(anchor) {
   camera.lookAt(0, 0, 0);
   controls.update();
 }
-async function ensureEntries(entries, title = 'Загрузка структур') {
-  return runQueue(entries, lowQuality ? 3 : 5, title);
+async function ensureEntries(entries, title = 'Загрузка структур', concurrency = lowQuality ? 2 : 4) {
+  const unique = [...new Map(entries.filter(Boolean).map(entry => [entry.id, entry])).values()];
+  const task = () => runQueue(unique, concurrency, title);
+  const result = loadPipeline.then(task, task);
+  loadPipeline = result.catch(() => []);
+  return result;
 }
 async function ensureEntry(id, focus = false) {
   const entry = catalogById.get(id);
@@ -751,12 +770,42 @@ async function ensureEntry(id, focus = false) {
   return mesh;
 }
 async function ensureSystem(systemId, detail = false) {
-  const entries = catalog.filter(entry => entry.system === systemId && (detail || entry.core || ['organ', 'brain', 'nerve'].includes(entry.layer)));
+  const entries = catalog.filter(entry => entry.system === systemId && (detail || entry.core));
   return ensureEntries(entries, `Загрузка: ${SYSTEM_BY_ID[systemId]?.label || systemId}`);
 }
 async function ensureLayers(layers, detail = false, title = 'Загрузка слоя') {
-  const entries = catalog.filter(entry => layers.includes(entry.layer) && (detail || entry.core || ['organ', 'brain', 'nerve'].includes(entry.layer)));
+  const entries = catalog.filter(entry => layers.includes(entry.layer) && (detail || entry.core));
   return ensureEntries(entries, title);
+}
+async function loadLayerDetails(layer) {
+  const entries = catalog.filter(entry => entry.layer === layer && !entry.core && !state.loaded.has(entry.id));
+  if (!entries.length) return toast(`${layerDefinitions[layer].label}: все доступные детали уже загружены`, 'success');
+  state.detailLayers.add(layer);
+  await ensureEntries(entries, `Детали: ${layerDefinitions[layer].label}`, lowQuality ? 2 : 3);
+  state.detailLoaded = true;
+  scheduleAdaptiveVisibility(true);
+  buildLayerControls();
+  toast(`${layerDefinitions[layer].label}: детальный набор загружен`, 'success');
+}
+async function loadVisibleDetails() {
+  const layers = Object.entries(state.layer).filter(([, config]) => config.visible).map(([layer]) => layer);
+  const entries = catalog.filter(entry => layers.includes(entry.layer) && !entry.core && !state.loaded.has(entry.id));
+  if (!entries.length) return toast('Для видимых слоёв новых деталей нет', 'success');
+  layers.forEach(layer => state.detailLayers.add(layer));
+  await ensureEntries(entries, 'Детали видимых слоёв', lowQuality ? 2 : 3);
+  state.detailLoaded = true;
+  scheduleAdaptiveVisibility(true);
+  buildLayerControls();
+}
+async function loadAllDetails() {
+  const entries = catalog.filter(entry => !state.loaded.has(entry.id));
+  if (!entries.length) return toast('Весь каталог уже загружен', 'success');
+  Object.keys(layerDefinitions).forEach(layer => state.detailLayers.add(layer));
+  toast('Полный каталог загружается постепенно. Сценой можно пользоваться во время загрузки.', 'warning', 4200);
+  await ensureEntries(entries, 'Полный каталог', lowQuality ? 1 : 2);
+  state.detailLoaded = true;
+  scheduleAdaptiveVisibility(true);
+  buildLayerControls();
 }
 
 function applyLayerState() {
@@ -1106,11 +1155,14 @@ function buildLayerControls() {
   container.innerHTML = Object.entries(layerDefinitions).map(([key, definition]) => {
     const config = state.layer[key];
     const count = [...state.loaded.values()].filter(mesh => mesh.userData.entry.layer === key).length;
+    const total = catalog.filter(entry => entry.layer === key).length;
+    const detailMissing = catalog.some(entry => entry.layer === key && !entry.core && !state.loaded.has(entry.id));
     return `<div class="layer-control" data-layer-row="${key}">
       <button class="layer-eye ${config.visible ? 'active' : ''}" data-layer-toggle="${key}" aria-label="Видимость">${config.visible ? '●' : '○'}</button>
       <span class="layer-swatch" style="--swatch:${definition.color}"></span>
-      <div class="layer-copy"><strong>${definition.label}</strong><small>${count} загружено</small></div>
+      <div class="layer-copy"><strong>${definition.label}</strong><small>${count}/${total} · ${Math.round(config.opacity * 100)}%</small></div>
       <input data-layer-opacity="${key}" type="range" min="0" max="100" value="${Math.round(config.opacity * 100)}" aria-label="Прозрачность ${definition.label}">
+      <button class="layer-detail ${detailMissing ? '' : 'loaded'}" data-layer-detail="${key}" ${detailMissing ? '' : 'disabled'} title="Загрузить детальные структуры">${detailMissing ? '+' : '✓'}</button>
       <button class="layer-unload" data-layer-unload="${key}" ${key === 'skin' || count === 0 ? 'disabled' : ''} title="Освободить память">↧</button>
     </div>`;
   }).join('');
@@ -1187,20 +1239,40 @@ async function moveTour(delta) {
   state.tourIndex = THREE.MathUtils.clamp(state.tourIndex + delta, 0, state.currentTour.steps.length - 1); await showTourStep();
 }
 async function nextQuiz() {
-  setMode('quiz');
-  const choices = QUIZ_BANK.filter(id => catalogById.has(id));
-  let id = choices[Math.floor(Math.random() * choices.length)];
-  if (choices.length > 1) while (id === state.quiz.targetId) id = choices[Math.floor(Math.random() * choices.length)];
-  state.quiz.targetId = id; state.quiz.locked = false;
-  const entry = catalogById.get(id);
-  state.layer[entry.layer].visible = true; state.systemVisibility[entry.system] = true;
-  await ensureSystem(entry.system, false);
-  applyLayerState();
-  byId('quizQuestion').textContent = `Найдите: ${entry.ru}`;
-  byId('quizHint').textContent = `${SYSTEM_BY_ID[entry.system]?.label} · ${entry.region}`;
-  byId('quizFeedback').textContent = 'Кликните по нужной структуре на модели.';
-  byId('quizFeedback').className = 'quiz-feedback';
-  byId('quizNext').disabled = true;
+  if (state.quiz.preparing) return;
+  state.quiz.preparing = true;
+  try {
+    const choices = QUIZ_BANK.filter(id => catalogById.has(id));
+    let id = choices[Math.floor(Math.random() * choices.length)];
+    if (choices.length > 1) while (id === state.quiz.targetId) id = choices[Math.floor(Math.random() * choices.length)];
+    state.quiz.targetId = id;
+    state.quiz.locked = false;
+    const entry = catalogById.get(id);
+    if (!state.quiz.previousLayers) {
+      state.quiz.previousLayers = Object.fromEntries(Object.entries(state.layer).map(([layer, config]) => [layer, { ...config }]));
+    }
+
+    const sameSystem = catalog.filter(candidate => candidate.system === entry.system && candidate.id !== id);
+    const alreadyLoaded = sameSystem.filter(candidate => state.loaded.has(candidate.id));
+    const corePool = sameSystem.filter(candidate => candidate.core && !state.loaded.has(candidate.id));
+    const shuffled = [...alreadyLoaded, ...corePool].sort(() => Math.random() - .5);
+    const pool = [entry, ...shuffled.slice(0, lowQuality ? 7 : 11)];
+    state.quiz.visibleIds = new Set(pool.map(candidate => candidate.id));
+
+    for (const layer of Object.keys(state.layer)) state.layer[layer].visible = false;
+    state.layer[entry.layer].visible = true;
+    state.systemVisibility[entry.system] = true;
+    await ensureEntries(pool, `Подготовка теста: ${SYSTEM_BY_ID[entry.system]?.short || ''}`, lowQuality ? 2 : 3);
+    applyLayerState();
+
+    byId('quizQuestion').textContent = `Найдите: ${entry.ru}`;
+    byId('quizHint').textContent = `${SYSTEM_BY_ID[entry.system]?.label} · ${entry.region}`;
+    byId('quizFeedback').textContent = 'Кликните по нужной структуре на модели.';
+    byId('quizFeedback').className = 'quiz-feedback';
+    byId('quizNext').disabled = true;
+  } finally {
+    state.quiz.preparing = false;
+  }
 }
 function handleQuizSelection(mesh) {
   if (state.quiz.locked) return;
@@ -1219,12 +1291,23 @@ function handleQuizSelection(mesh) {
   });
 }
 function setMode(mode) {
+  const leavingQuiz = state.mode === 'quiz' && mode !== 'quiz';
   state.mode = mode;
+  if (leavingQuiz) {
+    state.quiz.visibleIds.clear();
+    state.quiz.targetId = null;
+    state.quiz.locked = false;
+    if (state.quiz.previousLayers) {
+      for (const [layer, config] of Object.entries(state.quiz.previousLayers)) Object.assign(state.layer[layer], config);
+      state.quiz.previousLayers = null;
+    }
+    applyLayerState();
+  }
   const panelMode = ['explore', 'learn', 'quiz'].includes(mode) ? mode : 'explore';
   qsa('[data-mode]').forEach(button => button.classList.toggle('active', button.dataset.mode === mode || (button.dataset.mode === 'explore' && !['learn', 'quiz'].includes(mode))));
   qsa('[data-mode-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.modePanel === panelMode));
   canvas.classList.toggle('tool-active', ['measure', 'annotate'].includes(mode));
-  if (mode === 'quiz' && !state.quiz.targetId) nextQuiz();
+  if (mode === 'quiz' && !state.quiz.targetId && !state.quiz.preparing) void nextQuiz();
   toast({ explore: 'Режим просмотра', learn: 'Учебный режим', quiz: 'Тестирование', measure: 'Измерение: выберите две точки', annotate: 'Аннотации: кликните по модели' }[mode] || mode);
 }
 
@@ -1253,40 +1336,49 @@ function bindUI() {
   qsa('[data-preset]').forEach(button => button.addEventListener('click', () => activatePreset(button.dataset.preset)));
   qsa('[data-view]').forEach(button => button.addEventListener('click', () => setView(button.dataset.view)));
   qsa('[data-mode]').forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
-  byId('sidebarToggle').addEventListener('click', () => byId('leftSidebar').classList.toggle('open'));
+  byId('sidebarToggle').addEventListener('click', () => {
+    byId('settingsPanel').classList.remove('open');
+    byId('leftSidebar').classList.toggle('open');
+  });
   byId('sidebarClose').addEventListener('click', () => byId('leftSidebar').classList.remove('open'));
   byId('inspectorClose').addEventListener('click', clearSelection);
-  byId('settingsToggle').addEventListener('click', () => byId('settingsPanel').classList.toggle('open'));
+  byId('settingsToggle').addEventListener('click', () => {
+    byId('leftSidebar').classList.remove('open');
+    byId('settingsPanel').classList.toggle('open');
+  });
   byId('settingsClose').addEventListener('click', () => byId('settingsPanel').classList.remove('open'));
   byId('loadingToggle').addEventListener('click', () => byId('loadingPanel').classList.toggle('expanded'));
   byId('cancelLoading').addEventListener('click', cancelLoading);
   byId('retryFailed').addEventListener('click', retryFailed);
-  byId('loadDetail').addEventListener('click', async () => { await ensureEntries(catalog.filter(entry => !entry.core), 'Загрузка детального набора'); state.detailLoaded = true; });
+  byId('loadDetail').addEventListener('click', loadVisibleDetails);
+  byId('loadAllDetail').addEventListener('click', loadAllDetails);
   byId('layerControls').addEventListener('input', event => {
     if (!event.target.dataset.layerOpacity) return;
     state.layer[event.target.dataset.layerOpacity].opacity = Number(event.target.value) / 100; applyLayerState();
   });
   byId('layerControls').addEventListener('click', async event => {
     const toggle = event.target.closest('[data-layer-toggle]');
+    const detail = event.target.closest('[data-layer-detail]');
     const unload = event.target.closest('[data-layer-unload]');
     if (toggle) {
       const layer = toggle.dataset.layerToggle; state.layer[layer].visible = !state.layer[layer].visible;
       if (state.layer[layer].visible) await ensureLayers([layer], false, `Загрузка: ${layerDefinitions[layer].label}`);
       applyLayerState();
     }
+    if (detail) await loadLayerDetails(detail.dataset.layerDetail);
     if (unload) unloadLayer(unload.dataset.layerUnload);
   });
   byId('anatomyTree').addEventListener('click', async event => {
     const item = event.target.closest('[data-tree-id]');
     const toggle = event.target.closest('[data-system-toggle]');
-    if (item) await ensureEntry(item.dataset.treeId, true);
+    if (item) { await ensureEntry(item.dataset.treeId, true); if (compactDevice) byId('leftSidebar').classList.remove('open'); }
     if (toggle) { event.preventDefault(); event.stopPropagation(); state.systemVisibility[toggle.dataset.systemToggle] = !state.systemVisibility[toggle.dataset.systemToggle]; applyLayerState(); }
   });
   byId('treeSearch').addEventListener('input', event => { state.treeFilter = event.target.value; buildAnatomyTree(); });
   byId('searchInput').addEventListener('input', event => renderSearch(event.target.value));
   byId('searchResults').addEventListener('click', async event => {
     const item = event.target.closest('[data-search-id]'); if (!item) return;
-    await ensureEntry(item.dataset.searchId, true); byId('searchInput').value = ''; renderSearch('');
+    await ensureEntry(item.dataset.searchId, true); byId('searchInput').value = ''; renderSearch(''); if (compactDevice) byId('leftSidebar').classList.remove('open');
   });
   byId('relatedStructures').addEventListener('click', event => { const button = event.target.closest('[data-related-id]'); if (button) ensureEntry(button.dataset.relatedId, true); });
   byId('focusButton').addEventListener('click', () => state.selected && focusOn(state.selected));
@@ -1311,6 +1403,8 @@ function bindUI() {
   });
   byId('screenshotButton').addEventListener('click', takeScreenshot);
   byId('shareButton').addEventListener('click', copyDeepLink);
+  byId('sceneOnlyButton').addEventListener('click', () => document.body.classList.add('scene-only'));
+  byId('sceneOnlyExit').addEventListener('click', () => document.body.classList.remove('scene-only'));
   byId('copyShareUrl').addEventListener('click', async () => { await navigator.clipboard.writeText(byId('shareUrl').value); toast('Ссылка скопирована', 'success'); });
   byId('unloadHidden').addEventListener('click', unloadHidden);
   byId('autoUnload').addEventListener('change', event => { state.autoUnload = event.target.checked; scheduleAutoUnload(); });
@@ -1330,6 +1424,13 @@ function bindUI() {
 canvas.addEventListener('pointerdown', event => pointerStart.set(event.clientX, event.clientY));
 canvas.addEventListener('pointerup', handleCanvasClick);
 canvas.addEventListener('pointermove', event => {
+  if (state.mode === 'quiz') {
+    clearTimeout(hoverTimer);
+    hoverObject = null;
+    byId('hoverLabel').style.display = 'none';
+    canvas.style.cursor = controlsActive ? 'grabbing' : 'crosshair';
+    return;
+  }
   pendingHoverPoint = { clientX: event.clientX, clientY: event.clientY };
   if (hoverObject) { byId('hoverLabel').style.left = `${event.clientX}px`; byId('hoverLabel').style.top = `${event.clientY}px`; }
   const interval = lowQuality ? 125 : 80;
