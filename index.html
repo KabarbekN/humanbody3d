@@ -11,7 +11,8 @@
   {
     "imports": {
       "three": "https://unpkg.com/three@0.167.1/build/three.module.js",
-      "three/addons/": "https://unpkg.com/three@0.167.1/examples/jsm/"
+      "three/addons/": "https://unpkg.com/three@0.167.1/examples/jsm/",
+      "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.8.3/build/index.module.js"
     }
   }
   </script>
@@ -118,7 +119,7 @@
     <p><a href="https://github.com/Kevin-Mattheus-Moerman/BodyParts3D" target="_blank" rel="noreferrer">Открыть источник</a></p>
   </dialog>
 
-  <script type="module" src="./app.js?v=3-performance"></script>
+  <script type="module" src="./app.js?v=4-bvh-lod"></script>
   <script>
     const settings = document.getElementById('settingsPanel');
     document.getElementById('settingsToggle').addEventListener('click', () => settings.classList.add('open'));

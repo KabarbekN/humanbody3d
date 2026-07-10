@@ -2,6 +2,11 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from 'three-mesh-bvh';
+
+THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
+THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
+THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
 const REMOTE_ROOT = 'https://raw.githubusercontent.com/Kevin-Mattheus-Moerman/BodyParts3D/main/assets/BodyParts3D_data/stl/';
 const RAW_ROOT = new URLSearchParams(location.search).get('assets') === 'local' ? './models/' : REMOTE_ROOT;
@@ -12,12 +17,17 @@ const viewport = document.getElementById('viewport');
 
 // Lightweight renderer profile for large anatomical datasets.
 // Override manually with ?quality=low or ?quality=high.
-const qualityMode = new URLSearchParams(location.search).get('quality') || 'auto';
+const urlParams = new URLSearchParams(location.search);
+const qualityMode = urlParams.get('quality') || 'auto';
+const bvhEnabled = urlParams.get('bvh') !== 'off';
+const adaptiveDetailEnabled = urlParams.get('lod') !== 'off';
 const compactDevice = matchMedia('(max-width: 900px), (pointer: coarse)').matches
   || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4)
   || (navigator.deviceMemory && navigator.deviceMemory <= 4);
 const lowQuality = qualityMode === 'low' || (qualityMode === 'auto' && compactDevice);
 const maxPixelRatio = qualityMode === 'high' ? 1.5 : lowQuality ? 1 : 1.25;
+const lodPixelThreshold = qualityMode === 'high' ? 1.15 : lowQuality ? 4.0 : 2.1;
+const lodUpdateIntervalMs = lowQuality ? 150 : 95;
 
 const layerDefinitions = {
   skin:     { label: 'Кожа',         color: '#bd826d', visible: false, opacity: 0.24, order: 6 },
@@ -436,8 +446,13 @@ scene.add(glowRing);
 const clippingPlane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0);
 const loader = new STLLoader();
 const raycaster = new THREE.Raycaster();
+raycaster.firstHitOnly = true;
 const pointer = new THREE.Vector2();
 const pointerStart = new THREE.Vector2();
+const lodWorldCenter = new THREE.Vector3();
+const lodWorldScale = new THREE.Vector3();
+const bvhQueue = [];
+let bvhWorkScheduled = false;
 let hoverObject = null;
 let anchorReady = false;
 let interactionCandidates = [];
@@ -446,10 +461,108 @@ let needsRender = true;
 let controlsActive = false;
 let lastFrameTime = performance.now();
 let renderingFrame = false;
+let lastLodUpdate = 0;
+let lodUpdateTimer = 0;
 
 function invalidate() {
   needsRender = true;
   if (!frameHandle && !renderingFrame) frameHandle = requestAnimationFrame(renderFrame);
+}
+
+function queueBVHBuild(geometry) {
+  if (!bvhEnabled || !geometry || geometry.boundsTree || geometry.userData?.bvhQueued) return;
+  const triangleCount = geometry.index
+    ? Math.floor(geometry.index.count / 3)
+    : Math.floor((geometry.getAttribute('position')?.count || 0) / 3);
+  if (triangleCount < 2500) return;
+  geometry.userData = geometry.userData || {};
+  geometry.userData.bvhQueued = true;
+  bvhQueue.push(geometry);
+  scheduleBVHWork();
+}
+
+function scheduleBVHWork() {
+  if (bvhWorkScheduled || !bvhQueue.length) return;
+  bvhWorkScheduled = true;
+
+  const run = deadline => {
+    bvhWorkScheduled = false;
+    const started = performance.now();
+    while (bvhQueue.length) {
+      const hasIdleBudget = deadline ? deadline.timeRemaining() > 4 : performance.now() - started < 7;
+      if (!hasIdleBudget) break;
+      const geometry = bvhQueue.shift();
+      if (!geometry || geometry.boundsTree) continue;
+      try {
+        geometry.computeBoundsTree({ maxLeafTris: lowQuality ? 24 : 14 });
+      } catch (error) {
+        console.warn('BVH build skipped for one mesh', error);
+      }
+    }
+    if (bvhQueue.length) scheduleBVHWork();
+  };
+
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(run, { timeout: 900 });
+  } else {
+    setTimeout(() => run(null), 35);
+  }
+}
+
+function projectedDiameterPixels(mesh) {
+  const sphere = mesh.geometry.boundingSphere;
+  if (!sphere) return Infinity;
+  lodWorldCenter.copy(sphere.center).applyMatrix4(mesh.matrixWorld);
+  mesh.getWorldScale(lodWorldScale);
+  const radius = sphere.radius * Math.max(Math.abs(lodWorldScale.x), Math.abs(lodWorldScale.y), Math.abs(lodWorldScale.z));
+  const distance = Math.max(camera.position.distanceTo(lodWorldCenter), camera.near);
+  const pixelsPerWorldUnit = viewport.clientHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5)) * distance);
+  return radius * 2 * pixelsPerWorldUnit;
+}
+
+function updateAdaptiveVisibility() {
+  anatomyRoot.updateMatrixWorld(true);
+  camera.updateMatrixWorld(true);
+
+  for (const mesh of state.loaded.values()) {
+    const entry = mesh.userData.entry;
+    const baseVisible = state.isolated ? mesh === state.selected : state.layer[entry.layer].visible;
+    let detailVisible = true;
+
+    if (baseVisible && adaptiveDetailEnabled && !state.isolated && mesh !== state.selected && entry.layer !== 'skin') {
+      const threshold = entry.core ? lodPixelThreshold * 0.68 : lodPixelThreshold;
+      detailVisible = projectedDiameterPixels(mesh) >= threshold;
+    }
+
+    mesh.userData.detailVisible = detailVisible;
+    mesh.visible = baseVisible && detailVisible;
+    if (mesh.visible) queueBVHBuild(mesh.geometry);
+  }
+
+  rebuildInteractionCandidates();
+}
+
+function scheduleAdaptiveVisibility(force = false) {
+  if (!adaptiveDetailEnabled) {
+    updateAdaptiveVisibility();
+    return;
+  }
+  const elapsed = performance.now() - lastLodUpdate;
+  if (force || elapsed >= lodUpdateIntervalMs) {
+    if (lodUpdateTimer) clearTimeout(lodUpdateTimer);
+    lodUpdateTimer = 0;
+    lastLodUpdate = performance.now();
+    updateAdaptiveVisibility();
+    return;
+  }
+  if (!lodUpdateTimer) {
+    lodUpdateTimer = setTimeout(() => {
+      lodUpdateTimer = 0;
+      lastLodUpdate = performance.now();
+      updateAdaptiveVisibility();
+      invalidate();
+    }, lodUpdateIntervalMs - elapsed);
+  }
 }
 
 function rebuildInteractionCandidates() {
@@ -539,13 +652,17 @@ async function loadPart(entry) {
     mesh.name = entry.ru;
     mesh.userData.entry = entry;
     mesh.userData.localCenter = geometry.boundingBox.getCenter(new THREE.Vector3());
+    mesh.userData.triangleCount = geometry.index
+      ? Math.floor(geometry.index.count / 3)
+      : Math.floor(geometry.getAttribute('position').count / 3);
     mesh.visible = state.layer[entry.layer].visible;
     mesh.castShadow = false;
     mesh.receiveShadow = false;
     mesh.renderOrder = layerDefinitions[entry.layer].order;
     anatomyRoot.add(mesh);
     state.loaded.set(entry.id, mesh);
-    rebuildInteractionCandidates();
+    if (mesh.visible) queueBVHBuild(geometry);
+    scheduleAdaptiveVisibility(true);
     invalidate();
 
     if (entry.id === 'FMA7163') {
@@ -628,8 +745,8 @@ async function startLoading() {
     return;
   }
 
-  const core = catalog.filter(item => item.core && item.id !== 'FMA7163');
-  await runQueue(core, 5, 'Загрузка основных анатомических структур');
+  const initialMuscles = catalog.filter(item => item.core && item.layer === 'muscle');
+  await runQueue(initialMuscles, lowQuality ? 3 : 5, 'Загрузка мышечной системы');
   state.coreLoading = false;
   setConnectionStatus('ready', `${state.loaded.size} структур`);
   setLoadingVisible(false);
@@ -676,7 +793,6 @@ function applyLayerState() {
     const nextDepthWrite = layer.opacity > 0.55;
     const hadClipping = Boolean(material.clippingPlanes?.length);
 
-    mesh.visible = state.isolated ? mesh === state.selected : layer.visible;
     material.opacity = layer.opacity;
 
     const shaderStateChanged = material.transparent !== nextTransparent
@@ -689,7 +805,7 @@ function applyLayerState() {
     if (shaderStateChanged) material.needsUpdate = true;
   }
   if (state.selected) applySelectionHighlight(state.selected, true);
-  rebuildInteractionCandidates();
+  scheduleAdaptiveVisibility(true);
   updateLayerControls();
   invalidate();
 }
@@ -731,22 +847,29 @@ function applyPreset(name) {
   }
 }
 
-async function ensurePresetData(name) {
-  const definitions = {
-    brain: { layers: ['brain', 'nerve'], title: 'Загрузка мозга' },
-    internal: { layers: ['organ'], title: 'Загрузка органов' }
-  };
-  const definition = definitions[name];
-  if (!definition) return;
-
-  const entries = catalog.filter(entry => definition.layers.includes(entry.layer));
+async function ensureLayersData(layers, title) {
+  const entries = catalog.filter(entry => layers.includes(entry.layer));
   const pending = entries.filter(entry => !state.loaded.has(entry.id) && !state.failed.has(entry.id));
   if (!pending.length) return;
 
-  setConnectionStatus('loading', definition.title.toLocaleLowerCase('ru'));
-  await runQueue(entries, 5, definition.title);
+  setConnectionStatus('loading', title.toLocaleLowerCase('ru'));
+  await runQueue(entries, lowQuality ? 3 : 5, title);
   setLoadingVisible(false);
   setConnectionStatus('ready', `${state.loaded.size} структур`);
+}
+
+async function ensurePresetData(name) {
+  const definitions = {
+    skin: { layers: ['skin'], title: 'Загрузка кожи' },
+    muscles: { layers: ['muscle'], title: 'Загрузка мышц' },
+    skeleton: { layers: ['skeleton'], title: 'Загрузка скелета' },
+    brain: { layers: ['brain', 'nerve'], title: 'Загрузка мозга' },
+    internal: { layers: ['organ', 'artery', 'vein', 'nerve'], title: 'Загрузка внутренних систем' },
+    all: { layers: Object.keys(layerDefinitions), title: 'Загрузка всех систем' }
+  };
+  const definition = definitions[name];
+  if (!definition) return;
+  await ensureLayersData(definition.layers, definition.title);
 }
 
 async function activatePreset(name) {
@@ -774,7 +897,16 @@ function buildLayerControls() {
     if (checkKey) {
       state.isolated = false;
       state.layer[checkKey].visible = event.target.checked;
-      applyLayerState();
+      if (event.target.checked) {
+        event.target.disabled = true;
+        ensureLayersData([checkKey], `Загрузка: ${layerDefinitions[checkKey].label}`)
+          .finally(() => {
+            event.target.disabled = false;
+            applyLayerState();
+          });
+      } else {
+        applyLayerState();
+      }
     }
     if (opacityKey) {
       state.layer[opacityKey].opacity = Number(event.target.value) / 100;
@@ -806,6 +938,7 @@ function applyExplode() {
     const layerBoost = (layerDefinitions[mesh.userData.entry.layer].order - 2) * 0.08;
     mesh.position.copy(direction.multiplyScalar(localAmount * (1 + layerBoost)));
   }
+  scheduleAdaptiveVisibility(true);
   invalidate();
 }
 
@@ -856,7 +989,9 @@ function updateSelectedInfo(mesh) {
   document.getElementById('selectedName').textContent = entry.ru;
   document.getElementById('selectedEnglish').textContent = entry.latin;
   document.getElementById('selectedId').textContent = entry.id;
-  document.getElementById('selectedSize').textContent = `${dimensions[0]} × ${dimensions[1]} × ${dimensions[2]} см`;
+  const triangleCount = mesh.userData.triangleCount || 0;
+  const triangleLabel = triangleCount >= 1000 ? `${(triangleCount / 1000).toFixed(triangleCount >= 10000 ? 0 : 1)}k` : `${triangleCount}`;
+  document.getElementById('selectedSize').textContent = `${dimensions[0]} × ${dimensions[1]} × ${dimensions[2]} см · ${triangleLabel} △`;
   document.getElementById('selectedDescription').textContent = entry.description;
 }
 
@@ -1041,6 +1176,7 @@ function resize() {
   camera.updateProjectionMatrix();
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxPixelRatio));
   renderer.setSize(width, height, false);
+  scheduleAdaptiveVisibility(true);
   invalidate();
 }
 window.addEventListener('resize', resize, { passive: true });
@@ -1050,10 +1186,14 @@ controls.addEventListener('start', () => {
   canvas.style.cursor = 'grabbing';
   invalidate();
 });
-controls.addEventListener('change', invalidate);
+controls.addEventListener('change', () => {
+  scheduleAdaptiveVisibility(false);
+  invalidate();
+});
 controls.addEventListener('end', () => {
   controlsActive = false;
   canvas.style.cursor = hoverObject ? 'pointer' : 'grab';
+  scheduleAdaptiveVisibility(true);
   invalidate();
 });
 
@@ -1070,6 +1210,7 @@ function renderFrame(now) {
     const factor = 1 - Math.pow(0.001, dt);
     camera.position.lerp(state.targetCamera, factor);
     controls.target.lerp(state.targetLookAt, factor);
+    scheduleAdaptiveVisibility(false);
     keepAnimating = true;
     if (camera.position.distanceTo(state.targetCamera) < 0.01 && controls.target.distanceTo(state.targetLookAt) < 0.01) {
       camera.position.copy(state.targetCamera);
