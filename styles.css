@@ -787,3 +787,197 @@ body.scene-only .hover-label { display: none !important; }
     --muted: #666;
   }
 }
+
+/* Heat Map Visualization */
+.heat-map-controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.heat-map-selector {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.heat-map-button {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(12, 21, 29, .50);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  transition: all .2s ease;
+}
+
+.heat-map-button:hover {
+  background: rgba(102, 216, 255, .15);
+  border-color: var(--accent);
+}
+
+.heat-map-button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #061018;
+  font-weight: 600;
+}
+
+.heat-map-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.heat-map-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(12, 21, 29, .40);
+  border-radius: 12px;
+  min-width: 180px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.legend-color {
+  width: 32px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, .2);
+  flex-shrink: 0;
+}
+
+.legend-label {
+  color: var(--muted);
+  min-width: 40px;
+}
+
+.heat-map-slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.heat-map-slider input[type="range"] {
+  width: 120px;
+  cursor: pointer;
+}
+
+.heat-map-info {
+  padding: 10px 12px;
+  background: rgba(102, 216, 255, .08);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.heat-map-info strong {
+  display: block;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+/* Heat map tooltip */
+.heat-map-tooltip {
+  position: absolute;
+  background: rgba(12, 21, 29, .95);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text);
+  pointer-events: none;
+  z-index: 100;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .4);
+}
+
+.heat-map-tooltip strong {
+  color: var(--accent);
+}
+
+.heat-map-tooltip small {
+  display: block;
+  color: var(--muted);
+  margin-top: 4px;
+  white-space: nowrap;
+}
+
+/* Heat map comparison panel */
+.heat-map-comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 12px;
+}
+
+.comparison-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.comparison-item-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.comparison-item-value {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.comparison-item-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(102, 216, 255, .15);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.comparison-item-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0000ff, #00ff00, #ffff00, #ff0000);
+  border-radius: 3px;
+  transition: width .3s ease;
+}
+
+/* Responsive heat map controls */
+@media (max-width: 768px) {
+  .heat-map-controls {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .heat-map-selector {
+    width: 100%;
+  }
+
+  .heat-map-button {
+    flex: 1;
+    min-width: 80px;
+  }
+
+  .heat-map-legend {
+    width: 100%;
+  }
+
+  .heat-map-comparison {
+    grid-template-columns: 1fr;
+  }
+}

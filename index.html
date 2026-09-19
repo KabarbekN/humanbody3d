@@ -171,6 +171,18 @@
     </div>
 
     <div class="drawer-section memory-section">
+      <div class="section-title"><strong>Тепловые карты</strong></div>
+      <div class="heat-map-controls">
+        <div class="heat-map-selector" id="heatMapSelector"></div>
+      </div>
+      <div id="heatMapLegendContainer"></div>
+      <div class="heat-map-slider">
+        <label for="heatMapOpacity">Прозрачность:</label>
+        <input id="heatMapOpacity" type="range" min="0" max="1" step="0.1" value="0.7" />
+      </div>
+    </div>
+
+    <div class="drawer-section memory-section">
       <div class="section-title"><strong>Память и кэш</strong></div>
       <div class="memory-card"><span>В сцене</span><strong id="memorySummary">0 мешей</strong></div>
       <div class="memory-card"><span>Офлайн-кэш</span><strong id="cacheCount">проверка…</strong></div>

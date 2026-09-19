@@ -4,6 +4,7 @@ import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from 'three-mesh-bvh';
 import { SYSTEMS, SYSTEM_BY_ID, LEARNING_TOURS, QUIZ_BANK, enrichEntry, APP_VERSION } from './anatomy-data.js';
+import { initializeHeatMapSystem } from './heat-map-integration.js';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
@@ -1333,6 +1334,10 @@ async function clearAppCache() {
 
 function bindUI() {
   buildLayerControls(); buildAnatomyTree(); renderTours(); renderMeasurementList(); renderAnnotationList();
+  
+  // Initialize heat map system
+  initializeHeatMapSystem(scene, state, byId, qsa, invalidate).catch(err => console.warn('Heat map system failed to load:', err));
+  
   qsa('[data-preset]').forEach(button => button.addEventListener('click', () => activatePreset(button.dataset.preset)));
   qsa('[data-view]').forEach(button => button.addEventListener('click', () => setView(button.dataset.view)));
   qsa('[data-mode]').forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
