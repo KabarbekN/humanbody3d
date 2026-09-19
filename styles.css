@@ -448,3 +448,64 @@ body.scene-only .hover-label { display: none !important; }
   .layer-control { grid-template-columns: 25px 7px minmax(74px, 1fr) 58px 26px 26px; gap: 5px; }
   .layer-detail, .layer-unload { width: 26px; height: 26px; }
 }
+
+/* Accessibility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Enhanced focus-visible for keyboard navigation */
+*:focus-visible {
+  outline: 3px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+/* Touch-friendly targets (min 44x44px for mobile) */
+@media (hover: none) and (pointer: coarse) {
+  button, input, select, textarea, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: more) {
+  .glass {
+    border-color: var(--text);
+    background: rgba(7, 16, 24, 0.95);
+  }
+  button, input, select {
+    border-color: currentColor;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Dark/Light theme support */
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --bg: #f5f5f5;
+    --panel: rgba(245, 245, 245, .95);
+    --panel-strong: rgba(245, 245, 245, .98);
+    --line: rgba(0, 0, 0, .1);
+    --line-strong: rgba(0, 0, 0, .2);
+    --text: #1a1a1a;
+    --muted: #666;
+  }
+}
