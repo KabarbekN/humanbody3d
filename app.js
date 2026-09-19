@@ -429,7 +429,7 @@ renderer.shadowMap.enabled = false;
 renderer.localClippingEnabled = true;
 
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
-scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.05).texture;
+scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
 pmremGenerator.dispose();
 
 const controls = new OrbitControls(camera, canvas);
