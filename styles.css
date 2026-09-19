@@ -434,6 +434,8 @@ body.scene-only .hover-label { display: none !important; }
   .topbar { grid-template-columns: auto minmax(260px, 1fr) auto; }
   .view-toolbar { left: 10px; }
 }
+
+/* Tablet (768px - 900px) */
 @media (max-width: 900px) {
   .topbar { top: 6px; left: 6px; right: 6px; }
   .left-sidebar { top: 64px; bottom: 6px; left: 6px; width: min(340px, calc(100vw - 12px)); }
@@ -443,10 +445,199 @@ body.scene-only .hover-label { display: none !important; }
   .inspector { bottom: 122px; left: 6px; right: 6px; }
   .loading-manager { right: 6px; bottom: 122px; }
 }
+
+/* Mobile phones (up to 520px) */
 @media (max-width: 520px) {
-  .brand-block { padding: 4px; }
-  .layer-control { grid-template-columns: 25px 7px minmax(74px, 1fr) 58px 26px 26px; gap: 5px; }
+  /* Compact topbar */
+  .topbar { 
+    grid-template-columns: auto 1fr auto;
+    gap: 6px;
+    padding: 6px 8px;
+    min-height: 52px;
+    top: 8px;
+    left: 8px;
+    right: 8px;
+  }
+  
+  .brand-block { 
+    padding: 0;
+    gap: 6px;
+    min-width: auto;
+  }
+  
+  .brand-mark {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+  
+  .brand-block strong { font-size: 12px; }
+  .brand-block small { display: none; }
+  
+  /* Hide search on mobile, collapse to icon */
+  .search-wrap { display: none; }
+  .search-icon { display: none; }
+  
+  /* Compact top actions */
+  .top-actions { gap: 4px; }
+  .status-pill, .dataset-badge { font-size: 10px; padding: 5px 8px; }
+  .icon-button { width: 34px; height: 34px; font-size: 14px; }
+  
+  /* Full-screen sidebar */
+  .left-sidebar { 
+    top: 60px;
+    width: 100vw;
+    left: 0;
+    bottom: 0;
+    right: auto;
+    z-index: 40;
+    border-radius: 12px;
+    transform: translateX(-110%);
+    transition: transform 0.3s ease;
+  }
+  
+  .left-sidebar.active { transform: translateX(0); }
+  
+  body.sidebar-open .left-sidebar { transform: translateX(0); }
+  body.sidebar-open #viewport { pointer-events: none; }
+  
+  /* Settings drawer on mobile */
+  .settings-drawer {
+    top: 60px;
+    width: 100vw;
+    right: 0;
+    left: auto;
+    border-radius: 12px;
+    transform: translateX(110%);
+    transition: transform 0.3s ease;
+  }
+  
+  .settings-drawer.active { transform: translateX(0); }
+  body.settings-open .settings-drawer { transform: translateX(0); }
+  
+  /* Preset bar - horizontal scroll on mobile */
+  .preset-bar {
+    bottom: auto;
+    top: 52px;
+    left: 8px;
+    right: 8px;
+    max-width: calc(100vw - 16px);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 4px;
+    padding: 8px 8px;
+  }
+  
+  .preset-bar button {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+    min-width: 60px;
+  }
+  
+  .preset-bar span { font-size: 10px; }
+  
+  /* Tool dock - bottom bar */
+  .tool-dock {
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100vw;
+    justify-content: space-around;
+    gap: 0;
+    border-radius: 12px 12px 0 0;
+  }
+  
+  .tool-dock button {
+    flex: 1;
+    min-height: 48px;
+    border-radius: 0;
+    font-size: 10px;
+  }
+  
+  .tool-dock button:first-child { border-radius: 12px 0 0 0; }
+  .tool-dock button:last-child { border-radius: 0 0 0 12px; }
+  
+  /* View toolbar - hide on mobile, use preset icons instead */
+  .view-toolbar { display: none; }
+  
+  /* Inspector panel */
+  .inspector {
+    bottom: 50px;
+    left: 8px;
+    right: 8px;
+    max-height: 45vh;
+    border-radius: 12px;
+    z-index: 35;
+  }
+  
+  .inspector.hidden { display: none; }
+  
+  /* Loading manager - fullscreen on mobile */
+  .loading-manager {
+    bottom: 50px;
+    left: 8px;
+    right: 8px;
+    right: 8px;
+    border-radius: 12px;
+  }
+  
+  /* Tour player */
+  .tour-player {
+    bottom: auto;
+    top: 120px;
+    left: 8px;
+    right: 8px;
+    max-height: 30vh;
+    border-radius: 12px;
+  }
+  
+  /* Layer control - compact */
+  .layer-control { 
+    grid-template-columns: 25px 7px minmax(74px, 1fr) 58px 26px 26px;
+    gap: 5px;
+  }
+  
   .layer-detail, .layer-unload { width: 26px; height: 26px; }
+  
+  /* Mobile-specific improvements */
+  input[type="range"] {
+    height: 28px;
+  }
+  
+  input[type="text"],
+  input[type="search"],
+  select {
+    height: 40px;
+    font-size: 16px; /* Prevent zoom on iOS input focus */
+  }
+  
+  button {
+    min-height: 40px;
+  }
+  
+  /* Disable double-tap zoom delay */
+  input, button, select, textarea {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+  }
+  
+  /* Smoother scrolling on mobile */
+  .left-sidebar,
+  .settings-drawer,
+  .inspector,
+  .tour-player,
+  .loading-manager {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Very small phones (< 380px) */
+@media (max-width: 380px) {
+  .topbar { font-size: 12px; }
+  .icon-button { width: 32px; height: 32px; font-size: 12px; }
+  .mode-tabs button { font-size: 11px; height: 32px; }
+  .tool-dock { gap: 0; }
+  .tool-dock button { font-size: 9px; }
 }
 
 /* Accessibility */

@@ -68,7 +68,70 @@ a11y.announce('Model loaded', 'polite');
 a11y.setFocusTrap(modalElement, () => modalElement.close());
 ```
 
-### 3. Performance Monitor (`performance.js`)
+## 4. Mobile UI Manager (`mobile-ui.js`)
+Comprehensive mobile device handling and responsive UI management.
+
+**Features:**
+- Mobile/tablet/desktop detection
+- Orientation change handling
+- Sidebar and settings drawer management
+- Viewport info and optimization
+- Fullscreen API wrapper
+- Touch support detection
+- Safe area (notch) handling
+- Haptic feedback support
+
+**Usage:**
+```javascript
+import { MobileUIManager, FullscreenHelper } from './mobile-ui.js';
+
+// Initialize mobile UI manager
+const mobileUI = new MobileUIManager();
+
+// Listen to mobile events
+window.addEventListener('mobile:viewport-change', () => {
+  console.log('Viewport changed');
+  console.log(mobileUI.getViewportInfo());
+});
+
+window.addEventListener('mobile:orientation-change', (e) => {
+  console.log('Orientation:', e.detail.orientation);
+});
+
+// Configure viewport on page load
+MobileUIManager.configureViewport();
+
+// Sidebar toggle
+document.getElementById('sidebarToggle').addEventListener('click', () => {
+  mobileUI.toggleSidebar();
+});
+
+// Get optimal canvas resolution for device
+const size = mobileUI.getOptimalCanvasSize();
+canvas.width = size.width;
+canvas.height = size.height;
+renderer.setPixelRatio(size.dpr);
+
+// Fullscreen support
+if (FullscreenHelper.isSupported()) {
+  document.getElementById('fullscreenBtn').addEventListener('click', () => {
+    FullscreenHelper.toggle(document.getElementById('viewport'));
+  });
+  
+  FullscreenHelper.onChangeHandler((isFullscreen) => {
+    console.log('Fullscreen:', isFullscreen);
+  });
+}
+
+// Check touch support
+if (MobileUIManager.isTouchSupported()) {
+  console.log('Touch is supported');
+}
+
+// Haptic feedback
+mobileUI.vibrate(50); // Short buzz
+mobileUI.vibrate([100, 30, 100]); // Pattern
+```
 Real-time performance monitoring and optimization tools.
 
 **Features:**
@@ -118,9 +181,34 @@ lazyManager.unloadHiddenLayers(); // Free up memory
 console.log('Memory usage:', lazyManager.getMemoryUsage());
 ```
 
-## CSS Accessibility Features
+## CSS Accessibility & Mobile Features
 
-Added comprehensive accessibility CSS:
+Added comprehensive accessibility and mobile-optimized CSS:
+
+### Accessibility Features
+- **Focus Styles**: Enhanced focus-visible with custom outlines
+- **Touch Targets**: Min 44x44px on mobile devices
+- **High Contrast Mode**: Support for `prefers-contrast: more`
+- **Reduced Motion**: Respects `prefers-reduced-motion`
+- **Color Scheme**: Support for both dark and light modes
+- **Screen Reader Only**: `.sr-only` class for hidden but readable content
+
+### Mobile Responsive Design
+- **Multiple Breakpoints**:
+  - Desktop: > 1200px (full layout)
+  - Tablet: 768px - 1200px (optimized for medium screens)
+  - Mobile: 520px - 768px (compact UI)
+  - Small phones: < 380px (minimal layout)
+  
+- **Mobile Optimizations**:
+  - Full-screen sidebars with slide-in animation
+  - Bottom dock for tool buttons
+  - Horizontal scrolling preset bar
+  - Compact topbar without search
+  - 44px+ touch target sizes
+  - iOS viewport fit for notch support
+  - Prevent double-tap zoom delay
+  - Smooth scrolling (-webkit-overflow-scrolling)
 
 - **Focus Styles**: Enhanced focus-visible with custom outlines
 - **Touch Targets**: Min 44x44px on mobile devices
